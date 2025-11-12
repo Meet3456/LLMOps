@@ -16,15 +16,13 @@ def load_config(config_path: str | None = None) -> dict:
     env_path = os.getenv("CONFIG_PATH", None)
 
     if config_path is None:
-        config_path = env_path or str(_project_root() / "config" / "config.yaml")
+        config_path = env_path or str(_project_root() / "multi_doc_chat" / "config" / "config.yaml")
 
     path = Path(config_path)
 
     if not path.is_absolute():
         path = _project_root() / path
-
     if not path.exists():
         raise FileNotFoundError(f"Config file not found at {path}")
-    
     with open(path , "r" , encoding="utf-8") as file:
         return yaml.safe_load(file) or {}
