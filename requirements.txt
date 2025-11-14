@@ -21,3 +21,8 @@ Jinja2==3.1.4
 langsmith
 openai
 pandas
+
+pandas
+camelot-py[cv]
+tabulate
+pymupdf
