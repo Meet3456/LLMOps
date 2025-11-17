@@ -174,13 +174,36 @@ class DataIngestor:
         )
         log.info("Total chunks after splitting", chunks=len(chunks), session_id=self.session_id)
 
-        # FAISS manager very very important class for the docchat
+        # Step 4: create/load FAISS manager
         fm = FaissManager(self.faiss_dir, self.model_loader)
 
+        texts = [c.page_content for c in chunks]
+        metadatas = [dict(c.metadata or {}) for c in chunks]
 
+        try:
+            vs = fm.load_or_create_index(texts=texts, metadatas=metadatas)
+            log.info("FAISS loaded or created", index_dir=str(self.faiss_dir), session_id=self.session_id)
+        except Exception as e:
+            log.warning("First attempt to load/create FAISS failed, retrying", error=str(e), session_id=self.session_id)
+            vs = fm.load_or_create_index(texts=texts, metadatas=metadatas)
 
+        # Step 5: add documents idempotently
+        added = fm.add_documents(chunks)
+        log.info("FAISS index updated", added=added, index=str(self.faiss_dir), session_id=self.session_id)
 
+        # Step 6: return retriever configured with search kwargs
+        search_kwargs = {"k": k}
 
+        if search_type == "mmr":
+            search_kwargs.update({
+                "fetch_k": fetch_k,
+                "lambda_mult": lambda_mult
+            })
+
+        retriever = vs.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
+        log.info("Retriever ready", search_type=search_type, k=k, session_id=self.session_id)
+        return retriever
+    
 class FaissManager:
     """
     Manages a FAISS index directory with a small metadata file to avoid duplicate ingestion.
