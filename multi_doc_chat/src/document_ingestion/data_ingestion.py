@@ -25,6 +25,16 @@ def generate_session_id() -> str:
 
 
 class DataIngestor:
+    """
+    Ingest documents (text, pdf, images, tables) into a FAISS vectorstore.
+
+    - save input files to temp_dir
+    - extract text, tables, and image captions (via async loaders)
+    - multimodal chunking (text / table / image-aware)
+    - create or load FAISS index idempotently, add new chunks only
+    - return a configured retriever (supports 'mmr' or 'similarity')
+    """
+
     # As soon as the object of class is created , this will initialize temp and faiss directories for storing input data and faiss index session wise (data and faiss_index folder)
     def __init__(
         self,
@@ -63,16 +73,17 @@ class DataIngestor:
         """Resolve directory path, optionally adding session ID."""
         # by default it is True , so it will create session specific directories
         if self.use_session:
-            # e.g. "faiss_index/abc123"
+            # e.g. set the dir_path to "faiss_index/abc123"
             dir_path = base_path / self.session_id
         else:
-            # fallback: "faiss_index/"
+            # else fallback to as use_session is False: "faiss_index/"
             dir_path = base_path
         dir_path.mkdir(parents=True, exist_ok=True)
         return dir_path
     
 
     def _multimodal_split(
+        self,
         docs: List[Document],
         chunk_size_text: int = 1000,
         chunk_overlap_text: int = 200,
@@ -98,31 +109,40 @@ class DataIngestor:
             modality = doc.metadata.get("modality", "text")
 
             if modality == "image":
+                doc.metadata = dict(doc.metadata or {})
+                doc.metadata.setdefault("modality", "image")
                 out_chunks.append(doc)
+
             elif modality == "table":
                 parts = table_splitter.split_text(doc.page_content)
                 for p in parts:
-                    doc = Document(
-                        page_content=p,
-                        metadata=doc.metadata
+                    piece = Document(
+                        page_content = p,
+                        metadata = dict(doc.metadata or {})
                     )
-                    out_chunks.append(doc)
+                    piece.metadata["modality"] = "table"
+                    out_chunks.append(piece)
+
             else:
                 parts = text_splitter.split_documents([doc])
                 for p in parts:
                     p.metadata = dict(p.metadata or {})
                     p.metadata.update(doc.metadata or {})
+                    p.metadata.setdefault("modality", "text")
                     out_chunks.append(p)
 
-        log.info("Multimodal split complete", 
+        log.info(
+            "Multimodal split complete", 
             text_chunks=len([c for c in out_chunks if c.metadata.get("modality","text")=="text"]),
             table_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="table"]),
-            image_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="image"])
+            image_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="image"]),
+            session_id=self.session_id,
         )
         return out_chunks
     
 
-    async def built_retriever(self,
+    async def built_retriever(
+        self,
         paths: list[Path],
         *,
         chunk_size:int = 1000, 
@@ -132,15 +152,19 @@ class DataIngestor:
         fetch_k: int = 20,
         lambda_mult: float = 0.5
     ):
-        # Save uploaded files to temp directory
+        log.info("Starting ingestion: saving uploaded files", count=len(list(paths)), session_id=self.session_id)
+        # Step 1: persist files to temp dir (save_uploaded_files returns Path list)
         paths = save_uploaded_files(paths, self.temp_dir)
+        log.info("Files saved to temp dir", saved=[str(p) for p in paths], session_id=self.session_id)
 
-        # Load documents and assets
+        # Step 2: async load docs & assets (text, tables, images/captions)
         docs = await load_documents_and_assets(paths)
-        
+        log.info("Loaded documents & assets", count=len(docs), session_id=self.session_id)
+
         if not docs:
             raise ValueError("No valid documents loaded")
-
+        
+        # Step 3: chunking
         chunks = self._multimodal_split(
             docs,
             chunk_size_text=chunk_size,
@@ -148,6 +172,110 @@ class DataIngestor:
             chunk_size_table=600,
             chunk_overlap_table=50
         )
+        log.info("Total chunks after splitting", chunks=len(chunks), session_id=self.session_id)
 
         # FAISS manager very very important class for the docchat
         fm = FaissManager(self.faiss_dir, self.model_loader)
+
+
+
+
+
+class FaissManager:
+    """
+    Manages a FAISS index directory with a small metadata file to avoid duplicate ingestion.
+    - index_dir: directory where index.faiss and index.pkl are stored
+    - ingested_meta.json: keeps track of already-ingested fingerprints
+    """
+    def __init__(self, index_dir:Path , model_loader: Optional[ModelLoader]=None):
+        self.index_dir = Path(index_dir)
+        self.index_dir.mkdir(parents=True, exist_ok=True)
+
+        self.meta_path = self.index_dir / "ingested_meta.json"
+        self._meta : Dict[str,Any] = {"rows":{}}
+
+        if self.meta_path.exists():
+            try:
+                self._meta = json.loads(self.meta_path.read_text(encoding="utf-8")) or {"rows":{}}
+                log.info("Loaded existing FAISS metadata", index_dir=str(self.index_dir), entries=len(self._meta.get("rows",{})))
+            except Exception as e:
+                self._meta = {"rows":{}}
+                log.error("Failed to load FAISS metadata", index_dir=str(self.index_dir), error=str(e))
+
+        self.model_loader = model_loader or ModelLoader()
+        self.emb = self.model_loader.load_embeddings()
+        self.vs: Optional[FAISS] = None
+    
+
+    def _exists(self) -> bool:
+        '''
+        This acts as the on-disk test to decide whether to load an index or create one.Returns True if both the FAISS index file and the associated metadata file exist in the specified index directory.
+        '''
+        return (self.index_dir / "index.faiss").exists() and (self.index_dir / "index.pkl").exists()
+
+
+    @staticmethod
+    def _fingerprint(text: str, md: Dict[str, Any]) -> str:
+        src = md.get("source") or md.get("file_path")
+        rid = md.get("row_id")
+        if src is not None:
+            # use source path + row_id (if present) for deterministic de-duping
+            return f"{src}::{'' if rid is None else rid}"
+        # fallback to sha256(content)
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+    def _save_meta(self) -> None:
+        self.meta_path.write_text(json.dumps(self._meta , ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+    def add_documents(self,docs:List[Document]):
+        if self.vs is None:
+            raise ValueError("FAISS vectorstore not loaded. Call load_or_create_index() first.")
+        
+        new_docs: List[Document] = []
+
+        for doc in docs:
+            key = self._fingerprint(doc.page_content , doc.metadata or  {})
+            if key in self._meta.get("rows", {}):
+                log.debug("Skipping already-ingested document", fingerprint=key)
+                continue
+
+            # store minimal data and diagnostics in metadata
+            self._meta["rows"][key] = {
+                "source": doc.metadata.get("source"),
+                "modality": doc.metadata.get("modality"),
+                "length": len(doc.page_content)
+            }
+
+            new_docs.append(doc)    
+
+        if new_docs:
+            self.vs.add_documents(new_docs)
+            log.info("Added new documents to FAISS index", new_count=len(new_docs), total_count=len(self._meta.get("rows",{})))
+            self.vs.save_local(str(self.index_dir))
+            self._save_meta()
+
+        return new_docs
+    
+
+    def load_or_create_index(self, texts: Optional[List[str]], metadatas: Optional[list[dict]]):
+        if self._exists():
+            log.info("Loading existing FAISS index", index_dir=str(self.index_dir))
+
+            self.vs = FAISS.load_local(
+                str(self.index_dir), 
+                self.emb,
+                allow_dangerous_deserialization=True    
+            )
+            # Return loaded vectorstore
+            return self.vs
+        
+        # Create new index if texts provided
+        if not texts:
+            raise DocumentPortalException("No existing FAISS index and no data to create one", sys)
+
+        self.vs = FAISS.from_texts(texts=texts, embedding=self.emb, metadatas=metadatas or [])
+        self.vs.save_local(str(self.index_dir))
+        self._save_meta()
+        return self.vs
