@@ -11,10 +11,10 @@ import json
 import uuid
 from datetime import datetime
 from multi_doc_chat.utils.file_io import save_uploaded_files
-from multi_doc_chat.utils.document_ops import load_documents
+from multi_doc_chat.utils.document_ops import load_documents_and_assets
 import hashlib
 import sys
-
+import asyncio
 
 # Function to generate a unique session ID:
 def generate_session_id() -> str:
@@ -72,7 +72,8 @@ class DataIngestor:
         return dir_path
     
 
-    def _multimodal_split(docs: List[Document],
+    def _multimodal_split(
+        docs: List[Document],
         chunk_size_text: int = 1000,
         chunk_overlap_text: int = 200,
         chunk_size_table: int = 600,
@@ -113,14 +114,16 @@ class DataIngestor:
                     p.metadata.update(doc.metadata or {})
                     out_chunks.append(p)
 
-        log.info("Multimodal split complete", text_chunks=len([c for c in out_chunks if c.metadata.get("modality","text")=="text"]),
-             table_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="table"]),
-             image_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="image"]))
+        log.info("Multimodal split complete", 
+            text_chunks=len([c for c in out_chunks if c.metadata.get("modality","text")=="text"]),
+            table_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="table"]),
+            image_chunks=len([c for c in out_chunks if c.metadata.get("modality")=="image"])
+        )
         return out_chunks
     
 
-    def built_retriever(self,
-        uploaded_files:Iterable,
+    async def built_retriever(self,
+        paths: list[Path],
         *,
         chunk_size:int = 1000, 
         chunk_overlap:int = 200,
@@ -129,4 +132,22 @@ class DataIngestor:
         fetch_k: int = 20,
         lambda_mult: float = 0.5
     ):
-        pass
+        # Save uploaded files to temp directory
+        paths = save_uploaded_files(paths, self.temp_dir)
+
+        # Load documents and assets
+        docs = await load_documents_and_assets(paths)
+        
+        if not docs:
+            raise ValueError("No valid documents loaded")
+
+        chunks = self._multimodal_split(
+            docs,
+            chunk_size_text=chunk_size,
+            chunk_overlap_text=chunk_overlap,
+            chunk_size_table=600,
+            chunk_overlap_table=50
+        )
+
+        # FAISS manager very very important class for the docchat
+        fm = FaissManager(self.faiss_dir, self.model_loader)

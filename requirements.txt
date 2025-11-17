@@ -26,3 +26,4 @@ pandas
 camelot-py[cv]
 tabulate
 pymupdf
+beautifulsoup4
