@@ -149,7 +149,7 @@ class DataIngestor:
         chunk_overlap:int = 200,
         k:int = 5,
         search_type: str = "mmr",
-        fetch_k: int = 20,
+        fetch_k: int = 35,
         lambda_mult: float = 0.5
     ):
         log.info("Starting ingestion: saving uploaded files", count=len(list(paths)), session_id=self.session_id)
@@ -203,6 +203,7 @@ class DataIngestor:
         retriever = vs.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
         log.info("Retriever ready", search_type=search_type, k=k, session_id=self.session_id)
         return retriever
+    
     
 class FaissManager:
     """
