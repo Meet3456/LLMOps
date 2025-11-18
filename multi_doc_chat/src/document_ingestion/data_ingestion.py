@@ -19,9 +19,18 @@ import asyncio
 # Function to generate a unique session ID:
 def generate_session_id() -> str:
     """Generate a unique session ID with timestamp."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    unique_id = uuid.uuid4().hex[:8]
-    return f"session_{timestamp}_{unique_id}"
+    now = datetime.now()
+
+    day = now.strftime("%d")               # 18
+    month = now.strftime("%b").lower()     # nov
+    year = now.strftime("%Y")              # 2025
+    time_part = now.strftime("%I:%M_%p")   # 03:13_PM
+
+    # Clean time format (remove leading 0, lowercase am/pm)
+    time_part = time_part.lstrip("0").lower()
+
+    unique_id = uuid.uuid4().hex[:4]
+    return f"session_{day}_{month}_{year}_{time_part}_{unique_id}"
 
 
 class DataIngestor:
