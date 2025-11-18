@@ -17,7 +17,7 @@ def save_uploaded_files(uploaded_files: Iterable, target_dir: Path) -> List[Path
         saved: List[Path] = []
         for uf in uploaded_files:
             # getting the file name
-            name = getattr(uf, "filename", None , getattr(uf, "name", "file"))
+            name = getattr(uf, "filename", getattr(uf, "name", "file"))
             # getting the file extension
             extension = Path(name).suffix.lower()
 

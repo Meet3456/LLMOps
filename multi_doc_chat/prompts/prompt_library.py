@@ -2,9 +2,13 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 contextualize_question_prompt = ChatPromptTemplate.from_messages([
     ("system", (
-        "Given a conversation history and the most recent user query, rewrite the query as a standalone question "
-        "that makes sense without relying on the previous context. Do not provide an answer—only reformulate the "
-        "question if necessary; otherwise, return it unchanged."
+        "You are a query rewriting assistant.\n"
+        "Your task is to rewrite the user’s latest question into a fully standalone question.\n"
+        "Use the chat history only to fill missing references (e.g., pronouns, 'this', 'that', etc.).\n"
+        "Do NOT answer the question.\n"
+        "Do NOT add information.\n"
+        "DO NOT change meaning.\n"
+        "Return ONLY the rewritten question as plain text.\n"
     )),
     MessagesPlaceholder("chat_history"),
     ("human", "{input}"),

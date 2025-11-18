@@ -6,8 +6,16 @@ import asyncio
 import concurrent.futures
 from typing import Dict,Any,Optional
 
-client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+client = None
 
+def get_client():
+    global client
+    if client is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable not set.")
+        client = AsyncGroq(api_key=api_key)
+    return client
 
 # Global semaphore to limit concurrent Groq calls
 semaphore = asyncio.Semaphore(5)
@@ -29,6 +37,8 @@ async def encode_image_b64(path: str) -> str:
 
 
 async def _caption_request(b64: str, prompt: str, timeout: int, model: str, max_tokens: int, top_p: float, temperature: float):
+    client = get_client()
+
     message = [
         {"type":"text","text":prompt},
         {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
@@ -41,7 +51,7 @@ async def _caption_request(b64: str, prompt: str, timeout: int, model: str, max_
             max_tokens = max_tokens,
             top_p = top_p,
             temperature = temperature,
-            response_format = {"type":"json_object"}
+            response_format = {"type":"text"}
         )
 
         return completion

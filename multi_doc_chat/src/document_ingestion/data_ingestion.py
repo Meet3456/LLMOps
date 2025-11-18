@@ -56,12 +56,26 @@ class DataIngestor:
             self.temp_dir = self._resolve_dir(self.temp_base)
             self.faiss_dir = self._resolve_dir(self.faiss_base)
 
+            # New: artifact directory for saving extracted images/tables
+            self.artifacts_base = Path("artifacts")
+            self.artifacts_dir = self._resolve_dir(self.artifacts_base)
+
+            # Subdirectories
+            self.images_dir = self.artifacts_dir / "images"
+            self.tables_dir = self.artifacts_dir / "tables"
+
+            self.images_dir.mkdir(parents=True, exist_ok=True)
+            self.tables_dir.mkdir(parents=True, exist_ok=True)
+
+
             log.info(
                 "ChatIngestor initialized",
                     session_id=self.session_id,
                     temp_dir=str(self.temp_dir),
                     faiss_dir=str(self.faiss_dir),
-                    sessionized=self.use_session
+                    sessionized=self.use_session,
+                    images=str(self.images_dir),
+                    tables=str(self.tables_dir),
                 )
 
         except Exception as e:
@@ -158,7 +172,7 @@ class DataIngestor:
         log.info("Files saved to temp dir", saved=[str(p) for p in paths], session_id=self.session_id)
 
         # Step 2: async load docs & assets (text, tables, images/captions)
-        docs = await load_documents_and_assets(paths)
+        docs = await load_documents_and_assets(paths,images_dir=self.images_dir, tables_dir=self.tables_dir)
         log.info("Loaded documents & assets", count=len(docs), session_id=self.session_id)
 
         if not docs:
@@ -189,7 +203,7 @@ class DataIngestor:
 
         # Step 5: add documents idempotently
         added = fm.add_documents(chunks)
-        log.info("FAISS index updated", added=added, index=str(self.faiss_dir), session_id=self.session_id)
+
 
         # Step 6: return retriever configured with search kwargs
         search_kwargs = {"k": k}
@@ -240,13 +254,10 @@ class FaissManager:
 
     @staticmethod
     def _fingerprint(text: str, md: Dict[str, Any]) -> str:
-        src = md.get("source") or md.get("file_path")
-        rid = md.get("row_id")
-        if src is not None:
-            # use source path + row_id (if present) for deterministic de-duping
-            return f"{src}::{'' if rid is None else rid}"
-        # fallback to sha256(content)
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+        h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        src = md.get("source", "unknown")
+        return f"{src}::{h}"
+
 
 
     def _save_meta(self) -> None:
@@ -276,7 +287,7 @@ class FaissManager:
 
         if new_docs:
             self.vs.add_documents(new_docs)
-            log.info("Added new documents to FAISS index", new_count=len(new_docs), total_count=len(self._meta.get("rows",{})))
+            # log.info("Added new documents to FAISS index", new_count=len(new_docs), total_count=len(self._meta.get("rows",{})))
             self.vs.save_local(str(self.index_dir))
             self._save_meta()
 
