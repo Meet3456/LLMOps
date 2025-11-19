@@ -16,28 +16,29 @@ from multi_doc_chat.models.model import PromptType, ChatAnswer
 from pydantic import ValidationError
 
 
-class ConversationalRag:
+class RetrieverWrapper:
+    """
+    Wraps FAISS retriever and performs:
+     - Query relevance detection
+     - Query → documents
+    """
 
-    def __init__(self,session_id,retriever=None):
+    def __init__(self, retriever):
+        self.retriever = retriever
+
+    def is_document_query(self, query: str) -> bool:
+        """
+        Simple heuristic: if the retriever returns ANY documents → it's a doc query.
+        """
+
         try:
-            self.session_id = session_id
-
-            # Loading llm and prompts:
-            self.llm = self._load_llm()
-            self.contextualize_prompt: ChatPromptTemplate = PROMPT_REGISTRY[
-                PromptType.CONTEXTUALIZE_QUESTION.value
-            ]
-            self.qa_prompt: ChatPromptTemplate = PROMPT_REGISTRY[
-                PromptType.CONTEXT_QA.value
-            ]
-
-            # Lazy pieces
-            self.retriever = retriever
-            self.chain = None
-            if self.retriever is not None:
-                self._build_lcel_chain()
-
-            log.info("ConversationalRAG initialized", session_id=self.session_id)
+            docs = self.retriever.get_relevant_documents(query)
+            if docs and len(docs) > 0:
+                return True
         except Exception as e:
-            log.error("Failed to initialize ConversationalRAG", error=str(e))
-            raise DocumentPortalException("Initialization error in ConversationalRAG", sys)
+            log.warning("retriever failed", error=str(e))
+
+        return False
+
+    def retrieve(self, query: str):
+        return self.retriever.get_relevant_documents(query)

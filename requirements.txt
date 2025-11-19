@@ -27,3 +27,5 @@ camelot-py[cv]
 tabulate
 pymupdf
 beautifulsoup4
+
+langgraph
