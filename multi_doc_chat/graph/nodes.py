@@ -1,4 +1,3 @@
-from langgraph.types import Message
 from multi_doc_chat.graph.orchestrator import RAGAgent, ReasoningAgent, ToolAgent
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
@@ -7,7 +6,7 @@ Each node is a simple function that returns a dict: {"output": <Message or dict>
 Graph wiring is done in graph_builder.
 """
 
-# ========================= ROUTER NODE ===========================
+
 def router_node(state):
     """
     Decides which agent to route to:
@@ -21,22 +20,21 @@ def router_node(state):
 
     log.info("Router received query", query=user_query)
 
-    # 1) Check if query requires document context
-    if orchestrator.retriever.is_document_query(user_query):
-        log.info("Routing → RAG agent")
-        return {"route": "rag"}
-
-    # 2) Check if query needs a tool
+    # Check if query needs a tool
     if orchestrator.tool_detector.needs_tools(user_query):
         log.info("Routing → Tool agent")
         return {"route": "tools"}
 
-    # 3) Otherwise → reasoning agent
+    # Check if query requires document context
+    if orchestrator.retriever.is_document_query(user_query):
+        log.info("Routing → RAG agent")
+        return {"route": "rag"}
+
+    # Otherwise → reasoning agent
     log.info("Routing → Reasoning agent")
     return {"route": "reasoning"}
 
 
-# ========================= RAG NODE ==============================
 def rag_node(state):
     orchestrator = state["orchestrator"]
     query = state["input"]
@@ -46,7 +44,6 @@ def rag_node(state):
     return {"output": rag.run(query, chat_history)}
 
 
-# ========================= REASONING NODE =========================
 def reasoning_node(state):
     orchestrator = state["orchestrator"]
     query = state["input"]
@@ -55,7 +52,6 @@ def reasoning_node(state):
     return {"output": agent.run(query)}
 
 
-# ========================= TOOL NODE ==============================
 def tool_node(state):
     orchestrator = state["orchestrator"]
     query = state["input"]

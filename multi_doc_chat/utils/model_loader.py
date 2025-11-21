@@ -44,6 +44,8 @@ class ModelLoader:
         # Initialize API Key Manager - as we create the object of the class it will load and validate Env API Keys:
         self.api_key_mgr = ApiKeyManager()
 
+        self.api_keys = self.api_key_mgr.keys
+
         # Load configuration
         self.config = load_config()
         log.info("YAML config loaded", config_keys=list(self.config.keys()))
@@ -65,6 +67,11 @@ class ModelLoader:
     def load_llm(self, role: str):
         """
         Load and return the configured LLM model.
+        Args:
+            role: One of "rag", "reasoning", or "tools"
+            
+        Returns:
+            Configured LLM instance
         """
         # role in {"rag", "reasoning", "tools"}
         if role not in self.config["llm"]:

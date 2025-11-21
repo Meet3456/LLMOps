@@ -7,7 +7,7 @@ retriever:
   search_type: "mmr"
   fetch_k: 35
   lambda_mult: 0.45
-  score_threshold: null  # only used if search_type: "similarity_score_threshold"
+  score_threshold: 0.5  # only used if search_type: "similarity_score_threshold"
 
 llm:
   # ========== RAG LLM ==========  
@@ -25,17 +25,15 @@ llm:
     model_name: "openai/gpt-oss-20b"
     temperature: 0.1
     max_tokens: 2048
-    include_reasoning: true
+    # include_reasoning: true
     reasoning_effort: "medium"
 
   # ========== TOOLING LLM ==========
   tools:
     provider: "groq"
-    model_name: "groq/compound-mini"
+    model_name: "groq/compound"
     temperature: 0
-    max_tokens: 2048
-    include_reasoning: true
-    reasoning_format: "parsed"
+    max_tokens: 1024
     enabled_tools:
       - web_search
       - visit_website
