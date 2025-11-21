@@ -8,7 +8,10 @@ class CustomLogger:
     def __init__(self, log_dir="logs"):
         self.logs_dir = os.path.join(os.getcwd(), log_dir)
         os.makedirs(self.logs_dir, exist_ok=True)
-        log_file = f"{datetime.now().strftime('%m_%d_%Y_%H_%M_%S')}.log"
+
+        # Readable timestamp for logfile - Example: 21_Nov_2025_05_15_PM
+        readable_ts = datetime.now().strftime("%d_%b_%Y_%I_%M_%p")
+        log_file = f"{readable_ts}.log"
         self.log_file_path = os.path.join(self.logs_dir, log_file)
 
     def get_logger(self, name=__file__):
