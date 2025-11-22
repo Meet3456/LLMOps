@@ -1,6 +1,7 @@
 from groq import Groq
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
+import sys
 
 class GroqToolClient:
     """
