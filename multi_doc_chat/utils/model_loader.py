@@ -11,7 +11,7 @@ from multi_doc_chat.exception.custom_exception import DocumentPortalException
 
 
 class ApiKeyManager:
-    REQUIRED = ["GROQ_API_KEY", "GOOGLE_API_KEY"]
+    REQUIRED = ["GROQ_API_KEY_DEFAULT", "GROQ_API_KEY_COMPOUND", "GOOGLE_API_KEY"]
 
     def __init__(self):
         load_dotenv()
@@ -41,7 +41,7 @@ class ModelLoader:
     """
 
     def __init__(self):
-        # Initialize API Key Manager - as we create the object of the class it will load and validate Env API Keys:
+        # Initialize API Key Manager - as we create the object of the class it will load and validate Env API Keys and store it in keys attribute:
         self.api_key_mgr = ApiKeyManager()
 
         self.api_keys = self.api_key_mgr.keys
@@ -64,6 +64,19 @@ class ModelLoader:
             log.error("Error loading embedding model", error=str(e))
             raise DocumentPortalException("Failed to load embedding model", sys)
 
+    def _select_groq_key(self, role: str) -> str:
+        """
+        Select appropriate Groq API key based on role.
+        Args:
+            role: One of "rag", "reasoning", or "tools"
+            
+        Returns:
+            API key string
+        """
+        if role == "tools":
+            return self.api_keys.get("GROQ_API_KEY_COMPOUND")
+        return self.api_keys.get("GROQ_API_KEY_DEFAULT")
+
     def load_llm(self, role: str):
         """
         Load and return the configured LLM model.
@@ -82,8 +95,8 @@ class ModelLoader:
         llm_config = self.config["llm"][role]
         provider = llm_config["provider"]
         model = llm_config["model_name"]
-        temp = llm_config.get("temperature", 0.3)
-        max_t = llm_config.get("max_tokens", 2048)
+        temp = llm_config.get("temperature")
+        max_t = llm_config.get("max_tokens")
 
         log.info(f"Loading LLM for role={role}", model=model)
 
@@ -96,12 +109,33 @@ class ModelLoader:
             )
 
         if provider == "groq":
+
+            api_key = self._select_groq_key(role)
+
+            # Role-specific reasoning parameters
+            model_kwargs = {}
+
+            # Reasomning specific params
+            if role == "reasoning":
+                reasoning_format = llm_config.get("reasoning_format")
+                reasoning_effort = llm_config.get("reasoning_effort")
+
+            if reasoning_format:
+                model_kwargs["reasoning_format"] = reasoning_format
+
+            if reasoning_effort:
+                model_kwargs["reasoning_effort"] = reasoning_effort
+
+
+            if role == "tools":
+                pass
+
             return ChatGroq(
-                model=model,
-                api_key=self.api_keys.get("GROQ_API_KEY"),
-                temperature=temp,
-                max_tokens=max_t,
-                # reasoning params passed at call time
+                model = model,
+                api_key = api_key,
+                temperature = temp,
+                max_tokens = max_t,
+                model_kwargs = model_kwargs or None
             )
 
         raise ValueError(f"Unsupported provider {provider}")

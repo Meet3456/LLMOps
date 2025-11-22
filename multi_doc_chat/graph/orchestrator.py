@@ -103,8 +103,12 @@ class Orchestrator:
 
         # ================ Load tools client =========
         self.tools_client = GroqToolClient(
-            api_key=self.model_loader.api_keys.get("GROQ_API_KEY")
+            api_keys=[
+                self.model_loader.api_key_mgr.get("GROQ_API_KEY_COMPOUND"),
+                self.model_loader.api_key_mgr.get("GROQ_API_KEY_DEFAULT"),
+            ]
         )
+
         # ================ Initialize Tool Detector =========
         self.tool_detector = ToolDetector()
 
@@ -174,10 +178,10 @@ class Orchestrator:
 
             result = self.tools_client.call_compound(
                 query,
-                model=tconf["model_name"],
-                enabled_tools=tconf["enabled_tools"],
-                max_tokens=tconf.get("max_tokens", 1024),
-                stream=False,
+                model = tconf["model_name"],
+                enabled_tools = tconf["enabled_tools"],
+                max_tokens = tconf.get("max_tokens", 1024),
+                stream = False,
             )
 
             return {"type": "tool", **result}
