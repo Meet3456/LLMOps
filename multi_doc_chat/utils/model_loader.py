@@ -140,8 +140,6 @@ class ModelLoader:
                 model_kwargs["frequency_penalty"] = freq_pen
             if pres_pen is not None:
                 model_kwargs["presence_penalty"] = pres_pen
-
-            # --- FIX: ChatGroq does NOT accept model_kwargs=None ---
             if model_kwargs:
                 return ChatGroq(
                     model=model,
