@@ -53,7 +53,7 @@ class RetrieverWrapper:
             # FAISS distance-based retrieval
             docs_with_scores = self.retriever.vectorstore.similarity_search_with_score(
                 query,
-                k=self.k
+                k = self.k
             )
 
             log.info("Docs retrieved", num_docs=len(docs_with_scores))
@@ -74,7 +74,7 @@ class RetrieverWrapper:
 
             log.info("Best distance", value=best_distance)
 
-            # ↓ Correct threshold logic
+            # Correct threshold logic
             if best_distance <= self.score_threshold:
                 log.info("RAG document match", distance=best_distance)
                 return True
@@ -96,6 +96,8 @@ class RetrieverWrapper:
             List of relevant Document objects
         """
         try:
+            log.info("Starting retrieval", search_type=self.search_type)
+
             if self.search_type == "mmr":
                 # MMR retrieval: balances relevance and diversity
                 docs = self.retriever.get_relevant_documents(

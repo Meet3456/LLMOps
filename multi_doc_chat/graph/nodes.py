@@ -22,16 +22,16 @@ def router_node(state):
 
     # Check if query needs a tool
     if orchestrator.tool_detector.needs_tools(user_query):
-        log.info("Routing → Tool agent")
+        log.info("Routing -> Tool agent")
         return {"route": "tools"}
 
     # Check if query requires document context
     if orchestrator.retriever.is_document_query(user_query):
-        log.info("Routing → RAG agent")
+        log.info("Routing -> RAG agent")
         return {"route": "rag"}
 
     # Otherwise → reasoning agent
-    log.info("Routing → Reasoning agent")
+    log.info("Routing -> Reasoning agent")
     return {"route": "reasoning"}
 
 

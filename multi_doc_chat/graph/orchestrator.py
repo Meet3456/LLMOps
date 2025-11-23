@@ -49,15 +49,17 @@ class Orchestrator:
     def __init__(self, index_path: str):
         self.model_loader = ModelLoader()
 
-        # ================ Load FAISS ================
+        # Load the embeddings model:
         embeddings = self.model_loader.load_embeddings()
 
+        # Load the vectorestore(altready created by passing the faiss index path)
         self.vectorstore = FAISS.load_local(
             index_path,
             embeddings,
             allow_dangerous_deserialization=True
         )
 
+        # when we use vectorestore.as_retriever() the foll config is passed:
         retriever_config = self.model_loader.config.get("retriever", {})
         
         # Extract retriever parameters with defaults
@@ -71,14 +73,6 @@ class Orchestrator:
             "Initializing Orchestrator",
             index_path=index_path,
             retriever_config=retriever_config
-        )
-
-        # Load FAISS Vector Store
-        embeddings = self.model_loader.load_embeddings()
-        self.vectorstore = FAISS.load_local(
-            index_path,
-            embeddings,
-            allow_dangerous_deserialization=True
         )
 
         # Create MMR Retriever
