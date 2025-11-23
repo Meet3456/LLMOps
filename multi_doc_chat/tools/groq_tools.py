@@ -48,7 +48,6 @@ class GroqToolClient:
                             "wolfram_settings": {"authorization": "HP58J63QR8"},
                         }
                     },
-                    reasoning_format="parsed",
                     max_tokens=max_tokens,
                     stream=stream,
                 )

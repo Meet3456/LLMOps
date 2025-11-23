@@ -115,20 +115,18 @@ class ModelLoader:
             # Role-specific reasoning parameters
             model_kwargs = {}
 
-            # Reasomning specific params
+            reasoning_format = None
+
             if role == "reasoning":
                 reasoning_format = llm_config.get("reasoning_format")
-                reasoning_effort = llm_config.get("reasoning_effort")
 
-                if reasoning_format:
-                    model_kwargs["reasoning_format"] = reasoning_format
-
-                if reasoning_effort:
-                    model_kwargs["reasoning_effort"] = reasoning_effort
-
-
-            if role == "tools":
-                pass
+                return ChatGroq(
+                    model = model,
+                    api_key = api_key,
+                    temperature = temp,
+                    max_tokens = max_t,
+                    reasoning_format = reasoning_format,
+                )
 
             top_p = llm_config.get("top_p")
             freq_pen = llm_config.get("frequency_penalty")
@@ -140,6 +138,7 @@ class ModelLoader:
                 model_kwargs["frequency_penalty"] = freq_pen
             if pres_pen is not None:
                 model_kwargs["presence_penalty"] = pres_pen
+
             if model_kwargs:
                 return ChatGroq(
                     model=model,
@@ -157,19 +156,3 @@ class ModelLoader:
                 )
 
         raise ValueError(f"Unsupported provider {provider}")
-
-
-if __name__ == "__main__":
-    loader = ModelLoader()
-
-    # Test Embedding
-    embeddings = loader.load_embeddings()
-    print(f"Embedding Model Loaded: {embeddings}")
-    result = embeddings.embed_query("Hello, how are you?")
-    print(f"Embedding Result: {result}")
-
-    # Test LLM
-    llm = loader.load_llm()
-    print(f"LLM Loaded: {llm}")
-    result = llm.invoke("Hello, how are you?")
-    print(f"LLM Result: {result.content}")

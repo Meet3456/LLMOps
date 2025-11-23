@@ -64,10 +64,10 @@ while True:
     #     console.print("\n[bold yellow]Reasoning:[/bold yellow]")
     #     console.print(Markdown(str(reasoning)))
 
-    # Optional: show tool results
-    if tools_used:
-        console.print("\n[bold magenta]Executed Tools:[/bold magenta]")
-        console.print(Markdown(str(tools_used)))
+    # # Optional: show tool results
+    # if tools_used:
+    #     console.print("\n[bold magenta]Executed Tools:[/bold magenta]")
+    #     console.print(Markdown(str(tools_used)))
 
     # Store in chat history
     chat_history.append({"role": "user", "content": user_input})

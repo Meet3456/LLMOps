@@ -73,7 +73,7 @@ class Orchestrator:
             retriever_config=retriever_config
         )
 
-        # ================ Load FAISS Vector Store ================
+        # Load FAISS Vector Store
         embeddings = self.model_loader.load_embeddings()
         self.vectorstore = FAISS.load_local(
             index_path,
@@ -81,7 +81,7 @@ class Orchestrator:
             allow_dangerous_deserialization=True
         )
 
-        # ================ Create MMR Retriever ================
+        # Create MMR Retriever
         base_retriever = self.vectorstore.as_retriever(
             search_type=search_type,
             search_kwargs={
@@ -101,7 +101,7 @@ class Orchestrator:
             score_threshold=score_threshold
         )
 
-        # ================ Load tools client =========
+        # Load tools client
         self.tools_client = GroqToolClient(
             api_keys=[
                 self.model_loader.api_key_mgr.get("GROQ_API_KEY_COMPOUND"),
@@ -109,10 +109,10 @@ class Orchestrator:
             ]
         )
 
-        # ================ Initialize Tool Detector =========
+        # Initialize Tool Detector
         self.tool_detector = ToolDetector()
 
-        # ================ Prompts ===================
+        # Prompts
         self.contextualize_prompt = PROMPT_REGISTRY["contextualize_question"]
         self.qa_prompt = PROMPT_REGISTRY["context_qa"]
 
@@ -160,9 +160,7 @@ class Orchestrator:
             llm = self.model_loader.load_llm("reasoning")
 
             resp = llm.invoke(
-                query,
-                include_reasoning=True,
-                reasoning_effort="high",
+                query
             )
 
             return {

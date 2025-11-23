@@ -12,7 +12,9 @@ class ToolDetector:
     """
     
     TOOL_KEYWORDS = {
-        "web_search": ["search", "find online", "look up", "latest", "external" , "information" , "current", "news", "today"],
+        "web_search": ["search", "find online", "look up", "latest", "external" , "information" ,           "current", "news", "today","recent", "latest", "today", "yesterday", "this week",
+        "current", "update", "news", "score", "match", "live",
+        "result", "happened", "breaking", "just now"],
         "code_interpreter": ["calculate", "compute", "run code", "execute", "python", "code"],
         "wolfram_alpha": ["solve", "equation", "math", "calculate", "integral", "derivative"],
         "browser": ["visit", "open website", "go to", "browse"],
