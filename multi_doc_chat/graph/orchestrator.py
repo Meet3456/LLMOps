@@ -123,12 +123,16 @@ class Orchestrator:
         try:
             llm = self.model_loader.load_llm("rag")
 
+            log.info("Model loaded for rag with parameters", model=llm)
+
             # Step 1: rewrite question
             rewritten_query = (
                 self.contextualize_prompt
                 | llm
                 | StrOutputParser()
             ).invoke({"input": query, "chat_history": chat_history})
+
+            log.info("Rewritten query", rewritten_query=rewritten_query)
 
             docs = self.retriever.retrieve(rewritten_query)
             ctx = "\n\n".join([d.page_content for d in docs])

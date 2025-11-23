@@ -120,23 +120,43 @@ class ModelLoader:
                 reasoning_format = llm_config.get("reasoning_format")
                 reasoning_effort = llm_config.get("reasoning_effort")
 
-            if reasoning_format:
-                model_kwargs["reasoning_format"] = reasoning_format
+                if reasoning_format:
+                    model_kwargs["reasoning_format"] = reasoning_format
 
-            if reasoning_effort:
-                model_kwargs["reasoning_effort"] = reasoning_effort
+                if reasoning_effort:
+                    model_kwargs["reasoning_effort"] = reasoning_effort
 
 
             if role == "tools":
                 pass
 
-            return ChatGroq(
-                model = model,
-                api_key = api_key,
-                temperature = temp,
-                max_tokens = max_t,
-                model_kwargs = model_kwargs or None
-            )
+            top_p = llm_config.get("top_p")
+            freq_pen = llm_config.get("frequency_penalty")
+            pres_pen = llm_config.get("presence_penalty")
+
+            if top_p is not None:
+                model_kwargs["top_p"] = top_p
+            if freq_pen is not None:
+                model_kwargs["frequency_penalty"] = freq_pen
+            if pres_pen is not None:
+                model_kwargs["presence_penalty"] = pres_pen
+
+            # --- FIX: ChatGroq does NOT accept model_kwargs=None ---
+            if model_kwargs:
+                return ChatGroq(
+                    model=model,
+                    api_key=api_key,
+                    temperature=temp,
+                    max_tokens=max_t,
+                    model_kwargs=model_kwargs  # safe
+                )
+            else:
+                return ChatGroq(
+                    model=model,
+                    api_key=api_key,
+                    temperature=temp,
+                    max_tokens=max_t,
+                )
 
         raise ValueError(f"Unsupported provider {provider}")
 
