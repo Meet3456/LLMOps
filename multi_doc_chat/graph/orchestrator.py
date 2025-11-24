@@ -120,15 +120,24 @@ class Orchestrator:
             log.info("Model loaded for rag with parameters", model=llm)
 
             # Step 1: rewrite question
-            rewritten_query = (
-                self.contextualize_prompt
-                | llm
-                | StrOutputParser()
-            ).invoke({"input": query, "chat_history": chat_history})
+            if len(chat_history) > 0:
+                # keep only the last few messages to reduce tokens
+                trimmed_history = chat_history[-4:]
+
+                rewritten_query = (
+                    self.contextualize_prompt
+                    | llm
+                    | StrOutputParser()
+                ).invoke({"input": query, "chat_history": trimmed_history})
+            else:
+                rewritten_query = query
 
             log.info("Rewritten query", rewritten_query=rewritten_query)
 
+            # Retrieve documents on the basis of rewritten query:
             docs = self.retriever.retrieve(rewritten_query)
+
+            # Combine document contents
             ctx = "\n\n".join([d.page_content for d in docs])
 
             # Step 2: Final QA

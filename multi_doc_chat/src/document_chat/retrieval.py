@@ -113,32 +113,7 @@ class RetrieverWrapper:
                     fetch_k=self.fetch_k,
                     lambda_mult=self.lambda_mult
                 )
-                
-            elif self.search_type == "similarity":
-                # Standard similarity search
-                docs = self.retriever.get_relevant_documents(query, k=self.k)
-                log.info(
-                    "Similarity retrieval completed",
-                    query=query[:50],
-                    num_docs=len(docs)
-                )
-                
-            elif self.search_type == "similarity_score_threshold":
-                # Only return docs above score threshold
-                docs = self.retriever.get_relevant_documents(
-                    query,
-                    k=self.k,
-                    score_threshold=self.score_threshold
-                )
-                log.info(
-                    "Threshold retrieval completed",
-                    query=query[:50],
-                    num_docs=len(docs),
-                    threshold=self.score_threshold
-                )
-            else:
-                raise ValueError(f"Unknown search type: {self.search_type}")
-            
+
             return docs
             
         except Exception as e:
