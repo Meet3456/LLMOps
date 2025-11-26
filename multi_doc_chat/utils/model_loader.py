@@ -17,8 +17,11 @@ class ApiKeyManager:
         load_dotenv()
         self.keys = {}
 
+        # Iterate over the required keys:
         for k in self.REQUIRED:
+            # get the value of the specific key from Required list from Env variables:
             if val := os.getenv(k):
+                # Assign the value to respective key in keys dict:
                 self.keys[k] = val
                 log.info(f"Loaded {k} from env")
             else:
@@ -44,6 +47,7 @@ class ModelLoader:
         # Initialize API Key Manager - as we create the object of the class it will load and validate Env API Keys and store it in keys attribute:
         self.api_key_mgr = ApiKeyManager()
 
+        # Store all API keys in a single attribute for easy access : as keys contains all required keys
         self.api_keys = self.api_key_mgr.keys
 
         # Load configuration
@@ -59,11 +63,12 @@ class ModelLoader:
             model_name = self.config["embedding_model"]["model_name"]
             log.info("Loading embedding model", model=model_name)
             return GoogleGenerativeAIEmbeddings(model=model_name,
-                                                google_api_key=self.api_key_mgr.get("GOOGLE_API_KEY")) #type: ignore
+                                                google_api_key=self.api_keys.get("GOOGLE_API_KEY"))
         except Exception as e:
             log.error("Error loading embedding model", error=str(e))
             raise DocumentPortalException("Failed to load embedding model", sys)
 
+    # logic to select groq api key based on role
     def _select_groq_key(self, role: str) -> str:
         """
         Select appropriate Groq API key based on role.
@@ -77,6 +82,7 @@ class ModelLoader:
             return self.api_keys.get("GROQ_API_KEY_COMPOUND")
         return self.api_keys.get("GROQ_API_KEY_DEFAULT")
 
+    # load role-based llm:
     def load_llm(self, role: str):
         """
         Load and return the configured LLM model.
@@ -93,6 +99,7 @@ class ModelLoader:
 
         # get the respectieve llm config for specified role:
         llm_config = self.config["llm"][role]
+
         provider = llm_config["provider"]
         model = llm_config["model_name"]
         temp = llm_config.get("temperature")
@@ -117,6 +124,7 @@ class ModelLoader:
 
             reasoning_format = None
 
+            # Specific handling for reasoning LLM(as it have a one extra param)
             if role == "reasoning":
                 reasoning_format = llm_config.get("reasoning_format")
 
@@ -139,6 +147,7 @@ class ModelLoader:
             if pres_pen is not None:
                 model_kwargs["presence_penalty"] = pres_pen
 
+            # specifically for rag llm
             if model_kwargs:
                 return ChatGroq(
                     model=model,
@@ -148,6 +157,7 @@ class ModelLoader:
                     model_kwargs=model_kwargs  # safe
                 )
             else:
+                # default groq llm loading(router,tools)
                 return ChatGroq(
                     model=model,
                     api_key=api_key,

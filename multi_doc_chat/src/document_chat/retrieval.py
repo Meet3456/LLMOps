@@ -1,7 +1,7 @@
 import sys
 import os
 from operator import itemgetter
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any , Tuple
 
 from langchain_core.documents import Document
 
@@ -25,65 +25,65 @@ class RetrieverWrapper:
         * 0.5 = balanced approach (recommended)
     """
 
-    def __init__(
-        self,
-        retriever,
-        search_type,
-        k,
-        fetch_k,
-        lambda_mult,
-        score_threshold
-    ):
-        self.retriever = retriever
-        self.search_type = search_type
-        self.k = k
-        self.fetch_k = fetch_k
-        self.lambda_mult = lambda_mult
-        self.score_threshold = score_threshold
+    def __init__(self, vectorestore, config):
+        self.vectorestore = vectorestore
+        self.config = config
 
+        # Last best distance from quick doc-check
+        self.last_best_distance: Optional[float] = None
 
-    def is_document_query(self, query: str) -> bool:
+        log.info("RetrieverWrapper initialized with config: " + str(config))
+
+    def quick_relevance_check(self , query:str) -> Tuple[bool, Optional[float]]:
         """
-        Simple heuristic: if the retriever returns ANY documents → it's a doc query.
+        Quickly checks if the query is relevant to the document corpus.
+        Uses a lightweight similarity search to get a relevance score.
+        
+        Args:
+            query: User's query string
+        Returns:
+            Tuple of (is_relevant_to_document: bool, relevance_score: Optional[float] or none)
         """
-
         try:
-            log.info("threshold check", score_threshold=self.score_threshold)
+            # Fetch the top_k from config for relevance check and default to 3
+            top_k_for_check = min(5 , self.config.get("top_k") or 5)
 
-            # FAISS distance-based retrieval
-            docs_with_scores = self.retriever.vectorstore.similarity_search_with_score(
+            # Retrieve documents with similarity scores
+            docs_with_similarity_scores = self.vectorestore.similarity_search_with_score(
                 query,
-                k = self.k
+                k=top_k_for_check
             )
 
-            log.info("Docs retrieved", num_docs=len(docs_with_scores))
+            num_docs = len(docs_with_similarity_scores)
 
-            if not docs_with_scores:
-                log.info("No docs returned by FAISS")
-                return False
+            log.info("Doc-check: retrieved docs", num_docs=num_docs)
 
-            docs, scores = zip(*docs_with_scores)
+            # If no docs found, not relevant set last_best_distance to None and is query relevant to doc to False
+            if not docs_with_similarity_scores or num_docs == 0:
+                self.last_best_distance = None
+                return False, None
 
-            # Ensure conversion to float
-            scores = [float(s) for s in scores]
-
-            log.info("FAISS distances", scores=scores)
-
-            # LOWER = better
+            # get the best score by iterating over docs_with_similarity_scores
+            scores = [float(s) for _ , s in docs_with_similarity_scores]
             best_distance = min(scores)
 
-            log.info("Best distance", value=best_distance)
+            # Assign the value to last best distance
+            self.last_best_distance = best_distance
 
-            # Correct threshold logic
-            if best_distance <= self.score_threshold:
-                log.info("RAG document match", distance=best_distance)
-                return True
+            log.info("Doc-check FAISS distances", scores=scores)
+            log.info("Doc-check best distance", best_distance=best_distance)
 
-            log.info("Distance above threshold → NOT a doc query", distance=best_distance)
-            return False
+            # get the threshold value from config
+            score_threshold = self.config.get("score_threshold",0.5)
+            is_match = best_distance <= score_threshold
+            log.info("Doc-check match result", is_relevant_to_document=is_match)
+
+            return is_match, best_distance
+        
         except Exception as e:
-            log.warning("retriever failed", error=str(e))
-            return False
+            log.error(f"Relevance check failed: {e}")
+            self.last_best_distance = None
+            return False, None
 
     def retrieve(self, query: str) -> List[Document]:
         """
@@ -96,26 +96,23 @@ class RetrieverWrapper:
             List of relevant Document objects
         """
         try:
-            log.info("Starting retrieval", search_type=self.search_type)
-
-            if self.search_type == "mmr":
-                # MMR retrieval: balances relevance and diversity
-                docs = self.retriever.get_relevant_documents(
-                    query,
-                    k=self.k,
-                    fetch_k=self.fetch_k,
-                    lambda_mult=self.lambda_mult
-                )
-                log.info(
-                    "MMR retrieval completed",
-                    query=query[:50],
-                    num_docs=len(docs),
-                    fetch_k=self.fetch_k,
-                    lambda_mult=self.lambda_mult
-                )
-
-            return docs
+            # MMR (Maximal Marginal Relevance) for diversity
+            if self.config.get("search_type") == "mmr":
+                    
+                    log.info("using MMR Search for rtrieval")
+                    docs = self.vectorestore.max_marginal_relevance_search(
+                        query,
+                        k=self.config["top_k"],
+                        fetch_k=self.config["fetch_k"],
+                        lambda_mult=self.config["lambda_mult"]
+                    )
+                    log.info("Length of documents retrieved for mmr search - ",num_docs = len(docs))
+                    return docs
+            
+            # Default Similarity
+            return self.vectorestore.similarity_search(query, k=self.config["top_k"])
             
         except Exception as e:
-            log.error("Retrieval failed", error=str(e), query=query[:50])
-            raise DocumentPortalException("Document retrieval error", e)
+            log.error(f"Retrieval failed: {e}")
+            return []
+

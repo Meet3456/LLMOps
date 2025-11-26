@@ -1,4 +1,4 @@
-from multi_doc_chat.graph.orchestrator import RAGAgent, ReasoningAgent, ToolAgent
+from multi_doc_chat.graph.orchestrator import Orchestrator
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 """
@@ -7,54 +7,77 @@ Graph wiring is done in graph_builder.
 """
 
 
+# Appends the current step into existing steps in the state
+def _append_step(state,step):
+    steps = state.get("steps",[])
+    return steps + [step]
+
+
 def router_node(state):
     """
-    Decides which agent to route to:
+    LLM router Decides which agent to route to:
     - If the query is document related → RAG agent
     - Else if it requires tools → tool agent
     - Otherwise → reasoning agent
     """
-
+    orchestrator: Orchestrator = state["orchestrator"]
     user_query = state["input"]
-    orchestrator = state["orchestrator"]
+    chat_history = state.get("chat_history", [])
 
-    log.info("Router received query", query=user_query)
+    log.info("Router node evaluating query")
 
-    # Check if query needs a tool
-    if orchestrator.tool_detector.needs_tools(user_query):
-        log.info("Routing -> Tool agent")
-        return {"route": "tools"}
+    # Calls {route_query} function in orchestrator which decides which node to be routed to:
+    routing_decision = orchestrator.route_query(user_query, chat_history)
 
-    # Check if query requires document context
-    if orchestrator.retriever.is_document_query(user_query):
-        log.info("Routing -> RAG agent")
-        return {"route": "rag"}
+    log.info("Router node decision", route=routing_decision)
 
-    # Otherwise → reasoning agent
-    log.info("Routing -> Reasoning agent")
-    return {"route": "reasoning"}
+    return{
+        "route":routing_decision,
+        "steps":_append_step(state, "router")
+    }
 
 
 def rag_node(state):
-    orchestrator = state["orchestrator"]
-    query = state["input"]
-    chat_history = state["chat_history"]
+    orchestrator: Orchestrator = state["orchestrator"]
+    user_query = state["input"]
+    chat_history = state.get("chat_history", [])
 
-    rag = RAGAgent(orchestrator)
-    return {"output": rag.run(query, chat_history)}
+    log.info("RAG node invoked")
+
+    # Calls {run_rag} function in orchestrator which runs the RAG Pipeline:
+    response = orchestrator.run_rag(user_query, chat_history)
+
+    return {
+        "output": response,
+        "steps": _append_step(state, "rag"),
+    }
 
 
 def reasoning_node(state):
-    orchestrator = state["orchestrator"]
+    orchestrator: Orchestrator = state["orchestrator"]
     query = state["input"]
 
-    agent = ReasoningAgent(orchestrator)
-    return {"output": agent.run(query)}
+    log.info("Reasoning node invoked")
+
+    # Calls {run_reasoning} function in orchestrator which runs the Reasoning Pipeline:
+    response = orchestrator.run_reasoning(query)
+
+    return {
+        "output": response,
+        "steps": _append_step(state, "reasoning"),
+    }
 
 
 def tool_node(state):
-    orchestrator = state["orchestrator"]
+    orchestrator: Orchestrator = state["orchestrator"]
     query = state["input"]
 
-    agent = ToolAgent(orchestrator)
-    return {"output": agent.run(query)}
+    log.info("Tools node invoked")
+
+    # Calls {run_tools} function in orchestrator which runs the Reasoning Pipeline:
+    response = orchestrator.run_tools(query)
+
+    return {
+        "output": response,
+        "steps": _append_step(state, "tools"),
+    }
