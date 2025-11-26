@@ -1,196 +1,127 @@
+import json
 import traceback
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
-from multi_doc_chat.utils.model_loader import ModelLoader
-from multi_doc_chat.tools.groq_tools import GroqToolClient
-from multi_doc_chat.tools.tool_detection import ToolDetector 
-from multi_doc_chat.src.document_chat.retrieval import RetrieverWrapper
+from typing import List
+
+from pydantic import BaseModel, Field
+from typing_extensions import Literal
+
 from langchain_community.vectorstores import FAISS
 from langchain_core.output_parsers import StrOutputParser
-from operator import itemgetter
+
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.utils.model_loader import ModelLoader
+from multi_doc_chat.src.document_chat.retrieval import RetrieverWrapper
 from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
+from multi_doc_chat.tools.groq_tools import GroqToolClient
+from multi_doc_chat.exception.custom_exception import DocumentPortalException
 
 
-class RAGAgent:
-    def __init__(self, orchestrator):
-        self.orch = orchestrator
-
-    def run(self, query, chat_history):
-        return self.orch.rag_pipeline(query, chat_history)
-
-
-class ReasoningAgent:
-    def __init__(self, orchestrator):
-        self.orch = orchestrator
-
-    def run(self, query):
-        return self.orch.reason_pipeline(query)
-
-
-class ToolAgent:
-    def __init__(self, orchestrator):
-        self.orch = orchestrator
-
-    def run(self, query):
-        return self.orch.tool_pipeline(query)
-
+# Route query class
+class RouteQuery(BaseModel):
+    source: Literal["rag", "tools", "reasoning"] = Field(
+        ... , description="Which agent should handle this query."
+    )
 
 class Orchestrator:
     """
-    Holds:
+    Orchestrates:
+      - LLM-based routing (router LLM)
       - RAG pipeline
       - Reasoning pipeline
-      - Tool pipeline
-      - Chat memory
-      - Model loader
-      - Retriever
-      - Tool detector
+      - Tool pipeline (Groq Compound)
+      - Retrieval
     """
 
     def __init__(self, index_path: str):
+        # Create an instance of ModelLoader class:
         self.model_loader = ModelLoader()
+        # as is ml we call = "self.config = load_config()" , so we can save it
+        self.config = self.model_loader.config
 
-        # Load the embeddings model:
+        # Retrieval
+        self._init_retriever(index_path)
+        # LLMs
+        self._init_models()
+        # Tools (compound)
+        self._init_tools()
+
+        log.info("Orchestrator initialized successfully")
+
+
+    # Function which initializes retriever:
+    def _init_retriever(self, index_path:str):
+        # load embedddings
         embeddings = self.model_loader.load_embeddings()
 
-        # Load the vectorestore(altready created by passing the faiss index path)
-        self.vectorstore = FAISS.load_local(
+        # Load vectorestore(faiss local)
+        vectorestore = FAISS.load_local(
             index_path,
             embeddings,
             allow_dangerous_deserialization=True
         )
 
-        # when we use vectorestore.as_retriever() the foll config is passed:
-        retriever_config = self.model_loader.config.get("retriever", {})
-        
-        # Extract retriever parameters with defaults
-        search_type = retriever_config.get("search_type", "mmr")
-        k = retriever_config.get("top_k", 10)
-        fetch_k = retriever_config.get("fetch_k", 35)
-        lambda_mult = retriever_config.get("lambda_mult", 0.45)
-        score_threshold = retriever_config.get("score_threshold", 0.45)
+        # get the retriever config(which is mmr , can be changed as per req.)
+        retriever_confg = self.config.get("retriever", {})
 
-        log.info(
-            "Initializing Orchestrator",
-            index_path=index_path,
-            retriever_config=retriever_config
-        )
+        # get the retriever object which is returned by the RetrieverWrapper Class 
+        # retriever attribute has 2 methods - {"quick_relevance_check" and "retrieve"}
+        self.retriever = RetrieverWrapper(vectorestore=vectorestore , config=retriever_confg)
+        log.info("Retriever initialized successfully")
 
-        # Create MMR Retriever
-        base_retriever = self.vectorstore.as_retriever(
-            search_type=search_type,
-            search_kwargs={
-                "k": k,
-                "fetch_k": fetch_k,
-                "lambda_mult": lambda_mult,
-            } if search_type == "mmr" else {"k": k}
-        )
 
-        # Wrap with RetrieverWrapper for additional functionality
-        self.retriever = RetrieverWrapper(
-            retriever=base_retriever,
-            search_type=search_type,
-            k=k,
-            fetch_k=fetch_k,
-            lambda_mult=lambda_mult,
-            score_threshold=score_threshold
-        )
+    # Function which initializes llms
+    def _init_models(self):
+        # Router llm
+        router_llm_raw = self.model_loader.load_llm("router")
+        self.router_prompt = PROMPT_REGISTRY["router"]
+        self.router_llm = router_llm_raw.with_structured_output(RouteQuery)
 
-        # Load tools client
+        # RAG LLM
+        self.rag_llm = self.model_loader.load_llm("rag")
+        self.contextualize_prompt = PROMPT_REGISTRY["contextualize_question"]
+        self.qa_prompt = PROMPT_REGISTRY["context_qa"]
+
+        # Reasoning LLM
+        self.reasoning_llm = self.model_loader.load_llm("reasoning")
+        log.info("All llm's initialized successfully")
+
+
+    # gets api keys from model loader and initializes GrogToolCient:
+    def _init_tools(self):
         self.tools_client = GroqToolClient(
             api_keys=[
                 self.model_loader.api_key_mgr.get("GROQ_API_KEY_COMPOUND"),
                 self.model_loader.api_key_mgr.get("GROQ_API_KEY_DEFAULT"),
             ]
         )
+        log.info("Tools llm initialized successfully")
+        
+    
+    def _built_routing_signals(self , query:str):
+        q_lower = query.lower()
 
-        # Initialize Tool Detector
-        self.tool_detector = ToolDetector()
+        # Doc-check via FAISS , quick_relevance_check = returns a boolean whether is_query_relevant_to_document and the relevance_scorem distance(minimum)
+        is_query_relevant_to_document , best_distance = self.retriever.quick_relevance_check(query)
 
-        # Prompts
-        self.contextualize_prompt = PROMPT_REGISTRY["contextualize_question"]
-        self.qa_prompt = PROMPT_REGISTRY["context_qa"]
+        contains_url = "http://" in q_lower or "https://" in q_lower
 
-        log.info("Orchestrator initialized successfully")
+        contains_math = any(ch in q_lower for ch in "+-*/=") and any(
+            w in q_lower for w in ["solve", "calculate", "compute", "evaluate"]
+        )
+        asks_for_latest = any(
+            kw in q_lower for kw in ["latest", "today", "current",]
+        )
 
-    # Rag Pipeline:
-    def rag_pipeline(self, query: str, chat_history):
-        try:
-            llm = self.model_loader.load_llm("rag")
+        token_approx = len(q_lower.split())
 
-            log.info("Model loaded for rag with parameters", model=llm)
+        signals = {
+            "doc_match": is_query_relevant_to_document,
+            "best_distance": best_distance,
+            "contains_url": contains_url,
+            "contains_math": contains_math,
+            "asks_for_latest": asks_for_latest,
+            "approx_tokens": token_approx,
+        }
 
-            # Step 1: rewrite question
-            if len(chat_history) > 0:
-                # keep only the last few messages to reduce tokens
-                trimmed_history = chat_history[-4:]
-
-                rewritten_query = (
-                    self.contextualize_prompt
-                    | llm
-                    | StrOutputParser()
-                ).invoke({"input": query, "chat_history": trimmed_history})
-            else:
-                rewritten_query = query
-
-            log.info("Rewritten query", rewritten_query=rewritten_query)
-
-            # Retrieve documents on the basis of rewritten query:
-            docs = self.retriever.retrieve(rewritten_query)
-
-            # Combine document contents
-            ctx = "\n\n".join([d.page_content for d in docs])
-
-            # Step 2: Final QA
-            answer = (
-                self.qa_prompt
-                | llm
-                | StrOutputParser()
-            ).invoke({
-                "context": ctx,
-                "input": query,
-                "chat_history": chat_history
-            })
-
-            return {"type": "rag", "content": answer}
-
-        except Exception as e:
-            log.error("RAG pipeline error", error=str(e), traceback=traceback.format_exc())
-            return {"type": "rag", "content": f"RAG error: {str(e)}"}
-
-    # Reasoning Pipeline:
-    def reason_pipeline(self, query: str):
-        try:
-            llm = self.model_loader.load_llm("reasoning")
-
-            resp = llm.invoke(
-                query
-            )
-
-            return {
-                "type": "reasoning",
-                "content": resp.content,
-                "reasoning": getattr(resp, "reasoning", None),
-            }
-
-        except Exception as e:
-            log.error("Reasoning pipeline error", error=str(e))
-            return {"type": "reasoning", "content": f"Reasoning error: {str(e)}"}
-
-    # Tool Pipeline:
-    def tool_pipeline(self, query: str):
-        try:
-            tconf = self.model_loader.config["llm"]["tools"]
-
-            result = self.tools_client.call_compound(
-                query,
-                model = tconf["model_name"],
-                enabled_tools = tconf["enabled_tools"],
-                max_tokens = tconf.get("max_tokens", 1024),
-                stream = False,
-            )
-
-            return {"type": "tool", **result}
-
-        except Exception as e:
-            log.error("Tool pipeline error", error=str(e))
-            return {"type": "tool", "content": f"Tool error: {str(e)}"}
+        log.info("Routing signals", signals=signals)
+        return signals

@@ -42,7 +42,7 @@ class RetrieverWrapper:
         Args:
             query: User's query string
         Returns:
-            Tuple of (is_relevant_to_document: bool, relevance_score: Optional[float] or none)
+            Tuple of (is_query_relevant_to_document: bool, relevance_score: Optional[float] or none)
         """
         try:
             # Fetch the top_k from config for relevance check and default to 3
