@@ -1,76 +1,72 @@
-import os
-from rich.console import Console
-from rich.markdown import Markdown
-
-from multi_doc_chat.graph.builder import build_graph
+import traceback
 from multi_doc_chat.graph.orchestrator import Orchestrator
+from multi_doc_chat.logger import GLOBAL_LOGGER as log 
 
-console = Console()
+def print_block(title, content):
+    print("\n" + "=" * 80)
+    print(title)
+    print("=" * 80)
+    print(content)
+    print("=" * 80 + "\n")
 
-# ===========================================================
-# CONFIGURATION — CHANGE THIS TO YOUR SESSION INDEX PATH
-# ===========================================================
-INDEX_PATH = "faiss_index/session_18_nov_2025_3:54_pm_5d9f"
+def run_end_to_end(index_path: str):
+    try:
+        print_block("STARTING END-TO-END MULTI-TURN TEST", "")
 
-# ===========================================================
-# INITIALIZE ORCHESTRATOR + GRAPH
-# ===========================================================
-console.print("[bold cyan]Initializing orchestrator and graph...[/bold cyan]")
+        orch = Orchestrator(index_path=index_path)
+        print("Orchestrator loaded successfully.\n")
 
-orch = Orchestrator(index_path=INDEX_PATH)
-graph = build_graph()
+        # Chat history stores langchain-style messages
+        chat_history = []
 
-# Chat history for chatbot mode
-chat_history = []
+        # Define test turns
+        conversation_turns = [
+            # Turn 1
+            " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
 
-console.print("[green]Initialization complete! Chatbot ready.[/green]\n")
+            # Turn 2 (RAG)
+            # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?"
 
-# ===========================================================
-# CHAT LOOP
-# ===========================================================
-while True:
-    user_input = console.input("[bold magenta]You:[/bold magenta] ")
+            # # Turn 3 (Tools)
+            # "Give complete information about Training Data and Batching",
 
-    if user_input.lower() in ["exit", "quit", "bye"]:
-        console.print("[yellow]Exiting chat. Goodbye![/yellow]")
-        break
+            # # Turn 4 (Follow-up → contextual rewrite test)
+            # "what was the rate pf residual dropout used?" 
+        ]
 
-    # Build state for graph
-    state = {
-        "input": user_input,
-        "chat_history": chat_history,
-        "orchestrator": orch,
-        "route": None,
-        "output": None,
-    }
+        for i, user_query in enumerate(conversation_turns, start=1):
 
-    # Run through LangGraph
-    result_state = graph.invoke(state)
-    output = result_state.get("output", {})
+            print_block(f"🧠 TURN {i}: USER QUERY", user_query)
 
-    # Extract data
-    otype = output.get("type", "unknown")
-    content = output.get("content").encode("utf-8", "ignore").decode()
-    reasoning = output.get("reasoning")
-    tools_used = output.get("executed_tools")
+            # 1. ROUTE THE QUERY
+            route = orch.route_query(user_query, chat_history)
+            print(f"→ Router decision: {route}")
 
-    # Print output
-    console.print(f"\n[bold cyan]Route Selected:[/bold cyan] {otype.upper()}")
-    console.print("\n[bold green]Assistant:[/bold green]")
-    console.print(Markdown(content if content else "`<no content>`"))
+            # 2. EXECUTE PIPELINE
+            if route == "rag":
+                output = orch.run_rag(user_query, chat_history)
+            elif route == "reasoning":
+                output = orch.run_reasoning(user_query)
+            elif route == "tools":
+                output = orch.run_tools(user_query)
+            else:
+                output = f"[ERROR] Invalid route: {route}"
 
-    # Optional: show reasoning
-    # if reasoning:
-    #     console.print("\n[bold yellow]Reasoning:[/bold yellow]")
-    #     console.print(Markdown(str(reasoning)))
+            # 3. Print output
+            print_block("SYSTEM RESPONSE", output)
 
-    # # Optional: show tool results
-    # if tools_used:
-    #     console.print("\n[bold magenta]Executed Tools:[/bold magenta]")
-    #     console.print(Markdown(str(tools_used)))
+            # 4. Save to history (LangChain message simulation)
+            chat_history.append({"role": "human", "content": user_query})
+            chat_history.append({"role": "assistant", "content": output})
 
-    # Store in chat history
-    chat_history.append({"role": "user", "content": user_input})
-    chat_history.append({"role": "assistant", "content": content})
+        print_block("🎉 END-TO-END TEST COMPLETED SUCCESSFULLY", "")
 
-    console.print("\n" + "-" * 60 + "\n")
+    except Exception as e:
+        print_block("❌ ERROR DURING END-TO-END TEST", str(e))
+        print(traceback.format_exc())
+
+if __name__ == "__main__":
+    # Change index path according to your setup
+    DEFAULT_INDEX = "faiss_index/session_18_nov_2025_3:54_pm_5d9f"
+
+    run_end_to_end(DEFAULT_INDEX)

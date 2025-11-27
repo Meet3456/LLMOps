@@ -46,7 +46,7 @@ class RetrieverWrapper:
         """
         try:
             # Fetch the top_k from config for relevance check and default to 3
-            top_k_for_check = min(5 , self.config.get("top_k") or 5)
+            top_k_for_check = min(7 , self.config.get("top_k") or 7)
 
             # Retrieve documents with similarity scores
             docs_with_similarity_scores = self.vectorestore.similarity_search_with_score(
@@ -99,7 +99,11 @@ class RetrieverWrapper:
             # MMR (Maximal Marginal Relevance) for diversity
             if self.config.get("search_type") == "mmr":
                     
-                    log.info("using MMR Search for rtrieval")
+                    k=self.config["top_k"],
+                    fetch_k=self.config["fetch_k"],
+                    lambda_mult=self.config["lambda_mult"]
+
+                    log.info("using MMR Search for rtrieval with config parameters",top_k = k, fetch_k = fetch_k ,lambda_mult=lambda_mult)
                     docs = self.vectorestore.max_marginal_relevance_search(
                         query,
                         k=self.config["top_k"],

@@ -2,32 +2,27 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 
 # Router Prompt(LLM Based):LLM will decide where to route the query(rag/reasoning/tools)
-router_system_prompt = (
-    "You are an expert router. Choose the SINGLE best handler for the user query.\n\n"
-    "You MUST answer with a JSON object: {\"datasource\": \"rag\" | \"tools\" | \"reasoning\"}.\n\n"
-    "ROUTES:\n"
-    "- \"rag\": Use when the user is likely asking about uploaded documents, PDFs, statements, invoices,\n"
-    "          or anything that can be answered from internal indexed content.\n"
-    "- \"tools\": Use when the query clearly needs external live data (news, weather, prices, stock),\n"
-    "            web browsing, code execution, or non-trivial math solving.\n"
-    "- \"reasoning\": Use for deep explanations, conceptual questions, teaching, reasoning, or anything\n"
-    "               that is not clearly document-based or tool-based.\n\n"
-    "You are given some routing signals. They are only hints, not hard rules.\n"
-    "Be strict about returning VALID JSON only." 
-)
-
-router_prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system",router_system_prompt),
+router_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
         (
-            "human",
-            "User Query: \n{input}\n"
-            "Routing signals(JSON): \n{signals}\n"
-            "Strictly Return the best route as JSON , Do not add extra text."
-        )
-    ]
+            "You are an expert router. Decide which subsystem should handle the query.\n"
+            "OPTIONS:\n"
+            "- 'rag' → If the query relates to internal documents, research papers, PDFs, or indexed data.\n"
+            "- 'tools' → If the query needs external information, latest news, URLs, math, or computation.\n"
+            "- 'reasoning' → If the query requires thinking, explanation, logic, analysis, or general questions.\n\n"
+            "You will receive:\n"
+            "- input: The user query\n"
+            "- signals: Routing signals as JSON\n\n"
+            "ONLY respond using valid JSON following this schema:\n" 
 
-)
+            
+            "{{ \"source\": \"rag\" | \"tools\" | \"reasoning\" }}\n"
+        )
+    ),
+    ("human", "Query: {input}\n Signals: {signals}")
+])
+
 
 
 # Prompt for rewriting questions(queries) with context

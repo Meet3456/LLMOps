@@ -25,7 +25,7 @@ def build_graph():
     # conditional routing
     graph.add_conditional_edges(
         "router",
-        lambda state: state["route"],
+        lambda state: state["route"], 
         {
             "rag": "rag",
             "reasoning": "reasoning",

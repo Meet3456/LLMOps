@@ -3,12 +3,12 @@ embedding_model:
   model_name: "models/text-embedding-004"
 
 retriever:
-  top_k: 7
+  top_k: 10
   search_type: "mmr"
-  fetch_k: 25
-  lambda_mult: 0.6 
-  score_threshold: 0.55
-
+  fetch_k: 35
+  lambda_mult: 0.5 
+  score_threshold: 0.6
+ 
 groq:
   # two keys: one for compound/tools, one for rag/reasoning/multimodal
   api_keys:
@@ -29,7 +29,7 @@ llm:
     provider: "groq"
     model_name: "llama-3.3-70b-versatile"
     temperature: 0.1
-    max_tokens: 2048
+    max_tokens: 1024
     top_p: 0.9                  
     frequency_penalty: 0.1 
     presence_penalty: 0.1
@@ -37,18 +37,18 @@ llm:
   # DEEP REASONING LLM
   reasoning:
     provider: "groq"
-    model_name: "deepseek-r1-distill-llama-70b"
-    temperature: 0.0
-    max_tokens: 1024
-    reasoning_format: "parsed"
-
+    model_name: "qwen/qwen3-32b"
+    temperature: 0.5
+    max_tokens: 4096
+    reasoning_format: "parsed"     # parsed | raw | hidden
+    reasoning_effort: "default"    # only for Qwen → none | default
 
   # TOOLING LLM
   tools:
     provider: "groq"
     model_name: "groq/compound-mini"
     temperature: 0
-    max_tokens: 2048
+    max_tokens: 1024
     enabled_tools:
       - web_search
       - visit_website

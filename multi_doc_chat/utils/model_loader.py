@@ -119,22 +119,22 @@ class ModelLoader:
 
             api_key = self._select_groq_key(role)
 
-            # Role-specific reasoning parameters
-            model_kwargs = {}
-
-            reasoning_format = None
-
-            # Specific handling for reasoning LLM(as it have a one extra param)
             if role == "reasoning":
+                log.info("Loading reasoning model")
+                reasoning_effort = llm_config.get("reasoning_effort")
                 reasoning_format = llm_config.get("reasoning_format")
 
+                # GPT-OSS *must not* receive model_kwargs
                 return ChatGroq(
-                    model = model,
-                    api_key = api_key,
-                    temperature = temp,
-                    max_tokens = max_t,
-                    reasoning_format = reasoning_format,
+                    model=model,
+                    api_key=api_key,
+                    temperature=temp,
+                    max_tokens=max_t,
+                    reasoning_effort=reasoning_effort,   # low|medium|high
+                    reasoning_format=reasoning_format  # true/false
                 )
+            
+            model_kwargs = {}
 
             top_p = llm_config.get("top_p")
             freq_pen = llm_config.get("frequency_penalty")
@@ -156,13 +156,13 @@ class ModelLoader:
                     max_tokens=max_t,
                     model_kwargs=model_kwargs  # safe
                 )
-            else:
-                # default groq llm loading(router,tools)
-                return ChatGroq(
-                    model=model,
-                    api_key=api_key,
-                    temperature=temp,
-                    max_tokens=max_t,
-                )
+            
+            # default groq llm loading(router,tools)
+            return ChatGroq(
+                model=model,
+                api_key=api_key,
+                temperature=temp,
+                max_tokens=max_t,
+            )
 
         raise ValueError(f"Unsupported provider {provider}")
