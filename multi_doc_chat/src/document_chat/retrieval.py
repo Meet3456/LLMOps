@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from multi_doc_chat.utils.model_loader import ModelLoader
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
+import numpy as np
 
 
 class RetrieverWrapper:
@@ -25,16 +26,24 @@ class RetrieverWrapper:
         * 0.5 = balanced approach (recommended)
     """
 
-    def __init__(self, vectorestore, model_loader, config):
+    def __init__(self, vectorestore, model_loader:ModelLoader, retriever_config, reranker_config):
         self.vectorestore = vectorestore
-        self.config = config
         self.model_loader = model_loader
+        self.retriever_config = retriever_config or {}
+        self.reranker_config = reranker_config or {}
+
+        # Loaded once in ModelLoader.__init__
         self.reranker = model_loader.get_reranker()
 
         # Last best distance from quick doc-check
         self.last_best_distance: Optional[float] = None
 
-        log.info("RetrieverWrapper initialized with config: " + str(config))
+        log.info(
+            "RetrieverWrapper initialized",
+            retriever_cfg = self.retriever_config,
+            reranker_config = self.reranker_config,
+            reranker_enabled = bool(self.reranker),
+        )
 
     def quick_relevance_check(self , query:str) -> Tuple[bool, Optional[float]]:
         """
@@ -47,72 +56,56 @@ class RetrieverWrapper:
             Tuple of (is_query_relevant_to_document: bool, relevance_score: Optional[float] or none)
         """
         try:
-            
-            rerank_enabled = self.config.get("reranker", {}).get("enabled", False)
-            k = self.config.get("reranker", {}).get("top_k_routing", 25)
 
-            # Fetch the top_k from config for relevance check and default to 3
-            # top_k_for_check = min(7 , self.config.get("top_k") or 7)
-
-            # Retrieve documents with similarity scores
-            docs_with_similarity_scores = self.vectorestore.similarity_search_with_score(
-                query,
-                # k= top_k_for_check
-                k = k
+            top_k_for_check = self.reranker_config.get(
+                "top_k_routing",
+                self.retriever_config.get("top_k",10)
             )
+            # Retrieve documents with similarity scores - Faiss top-k
+            docs_with_scores = self.vectorestore.similarity_search_with_score(query, k=top_k_for_check)
 
-            num_docs = len(docs_with_similarity_scores)
+            num_docs = len(docs_with_scores)
 
             log.info("Doc-check: retrieved docs", num_docs=num_docs)
 
             # If no docs found, not relevant set last_best_distance to None and is query relevant to doc to False
-            if not docs_with_similarity_scores or num_docs == 0:
+            if not docs_with_scores or num_docs == 0:
                 self.last_best_distance = None
                 return False, None
 
-            # get the best score by iterating over docs_with_similarity_scores
-            '''
-            scores = [float(s) for _ , s in docs_with_similarity_scores]
-            best_distance = min(scores)
+            faiss_scores = [float(s) for _, s in docs_with_scores]
+            best_faiss = min(faiss_scores)
 
-            # Assign the value to last best distance
-            self.last_best_distance = best_distance 
+            log.info("Doc-check (FAISS)", list_of_all_scores = faiss_scores, best_score = best_faiss)
 
-            log.info("Doc-check FAISS distances", scores=scores)
-            log.info("Doc-check best distance", best_distance=best_distance)
+            if self.reranker:
+                log.info("Applying the reranker logic")
 
-            # get the threshold value from config
-            score_threshold = self.config.get("score_threshold",0.5)
-            is_match = best_distance <= score_threshold
-            log.info("Doc-check match result", is_relevant_to_document=is_match)
+                # Creating the pairs of query and docs fetched from faiss
+                pairs = [(query, doc.page_content) for doc, _ in docs_with_scores]
+                # Passing it to the reranker model and getting the reranked scores
+                rerank_scores = self.reranker.predict(pairs,batch_size=8)
 
-            return is_match, best_distance
-            '''
-            docs, faiss_scores = zip(*docs_with_similarity_scores)
-            best_distance = min(faiss_scores)
-            self.last_best_distance = best_distance
+                # convert numpy types:
+                rerank_scores = [float(s) for s in rerank_scores]
+                # getting the best reranked scored:
+                best_rerank = max(rerank_scores)
 
-            if not rerank_enabled:
-                threshold = self.config.get("score_threshold", 0.55)
-                is_rel = best_distance <= threshold
-                log.info("Routing relevance",
-                         faiss_best=best_distance, relevant=is_rel)
-                return is_rel, best_distance
+                log.info("Doc-check (Reranker)", reranked_scores = rerank_scores, best_reranked_Score = best_rerank)
 
-            # 1B) RERANK top-k FAISS docs
-            pairs = [(query, d.page_content) for d in docs]
-            rerank_scores = self.reranker.predict(pairs)
+                # FINAL relevance decision (reranker dominates FAISS)
+                is_relevant = best_rerank >= 0.68   # tuned threshold
 
-            best_rerank = float(max(rerank_scores))
+                # Save last for RAG
+                self.last_best_distance = best_rerank
 
-            log.info("Routing reranker results",
-                     best_distance=best_distance,
-                     best_rerank_score=best_rerank)
-
-            # reranker score threshold ~0.5 recommended for BGE large
-            is_relevant = best_rerank > 0.45
-
-            return is_relevant, best_rerank
+                return is_relevant, best_rerank
+        
+            # If no reranker installed → fallback to FAISS thresholding
+            log.info("Reranked disabled - applying basic faiss thresholding logic")
+            is_relevant = best_faiss <= self.config.get("score_threshold", 0.55)
+            self.last_best_distance = best_faiss
+            return is_relevant, best_faiss
         
         except Exception as e:
             log.error(f"Relevance check failed: {e}")
@@ -130,26 +123,45 @@ class RetrieverWrapper:
             List of relevant Document objects
         """
         try:
-            # MMR (Maximal Marginal Relevance) for diversity
-            if self.config.get("search_type") == "mmr":
-                    
-                    k=self.config["top_k"],
-                    fetch_k=self.config["fetch_k"],
-                    lambda_mult=self.config["lambda_mult"]
 
-                    log.info("using MMR Search for rtrieval with config parameters",top_k = k, fetch_k = fetch_k ,lambda_mult=lambda_mult)
-                    docs = self.vectorestore.max_marginal_relevance_search(
-                        query,
-                        k=self.config["top_k"],
-                        fetch_k=self.config["fetch_k"],
-                        lambda_mult=self.config["lambda_mult"]
-                    )
-                    log.info("Length of documents retrieved for mmr search - ",num_docs = len(docs))
-                    return docs
-            
-            # Default Similarity
-            return self.vectorestore.similarity_search(query, k=self.config["top_k"])
-            
+            rerank_enabled = self.reranker_config.get("enabled", False) and self.reranker is not None
+
+            fetch_k = self.reranker_config.get("top_k_retrieval")
+            final_k = self.reranker_config.get("final_k")
+
+            fetch_k_mmr = self.retriever_config.get("fetch_k",35)
+            top_k_for_mmr = self.retriever_config.get("top_k",10)
+
+            # MMR (Maximal Marginal Relevance) for diversity
+            if self.retriever_config.get("search_type") == "mmr":
+                    
+                lambda_mult = self.retriever_config.get("lambda_mult", 0.5)
+
+                log.info("using MMR Search for retrieval with config parameters",final_k_sent_to_RAG_LLM = top_k_for_mmr, fetch_k = fetch_k_mmr ,lambda_mult=lambda_mult)
+
+                docs = self.vectorestore.max_marginal_relevance_search(
+                    query,
+                    k = top_k_for_mmr,
+                    fetch_k = fetch_k_mmr,
+                    lambda_mult = lambda_mult
+                )
+                log.info("Length of documents retrieved for mmr search - ",num_docs = len(docs))
+            else:
+                # if search type is not set to mmr then retrieve using basic similarity search
+                docs = self.vectorestore.similarity_search(query , k = fetch_k)
+
+            # Reranking the retrieved docs from mmm/similarity searchid enabled:
+            pairs = [(query, d.page_content) for d in docs]
+            scores = self.reranker.predict(pairs)
+            scores = [float(s) for s in scores]
+
+            reranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
+
+            final_docs = [d for d, s in reranked[:final_k]]
+
+            log.info("Final reranked retrieval", final_count=len(final_docs))
+
+            return final_docs
         except Exception as e:
             log.error(f"Retrieval failed: {e}")
             return []

@@ -15,13 +15,13 @@ groq:
     default_env: "GROQ_API_KEY_DEFAULT"
     compound_env: "GROQ_API_KEY_COMPOUND"
 
-reanker:
+reranker:
   enabled: true
-  model_name: "BAAI/bge-reranker-large"
-  top_k_routing: 25      # number of docs used in routing quick check
-  top_k_retrieval: 50    # number of docs fetched from FAISS before reranking
-  final_k: 7             # final docs sent to RAG LLM
-  torch_dtype: "bfloat16"
+  model_name: "BAAI/bge-reranker-v2-m3"
+  top_k_routing: 10      # number of docs used in routing quick check
+  top_k_retrieval: 25    # number of docs fetched from FAISS before reranking
+  final_k: 5            # final docs sent to RAG LLM
+  torch_dtype: "float32"
 
 llm:
   # ROUTER: High speed, specific JSON structure

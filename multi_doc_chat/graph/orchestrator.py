@@ -59,13 +59,16 @@ class Orchestrator:
             embeddings,
             allow_dangerous_deserialization=True
         )
+        
+        # get the retriever config(which is mmr , can be changed as per req):
+        retriever_config = self.config.get("retriever", {})
 
-        # get the retriever config(which is mmr , can be changed as per req.)
-        retriever_confg = self.config.get("retriever", {})
+        # get the reranker model config:
+        reranker_cfg = self.config.get("reranker", {}) 
 
         # get the retriever object which is returned by the RetrieverWrapper Class 
         # retriever attribute has 2 methods - {"quick_relevance_check" and "retrieve"}
-        self.retriever = RetrieverWrapper(vectorestore=vectorestore , config=retriever_confg)
+        self.retriever = RetrieverWrapper(vectorestore=vectorestore , model_loader=self.model_loader ,retriever_config=retriever_config , reranker_config=reranker_cfg)
         log.info("Retriever initialized successfully")
 
 
@@ -219,7 +222,6 @@ class Orchestrator:
                 traceback = traceback.format_exc()
             )
             raise DocumentPortalException("error in run rag function",e) from e
-            return ""
         
     
     # Function ehich runs the reasoning pipeline(if routed to reasoning node)

@@ -55,32 +55,34 @@ class ModelLoader:
         self.config = load_config()
         log.info("YAML config loaded", config_keys=list(self.config.keys()))
 
-        self.reranker = None
-        if self.config.get("reranker", {}).get("enabled", False):
-            self._init_reranker()
+        self.reranker = self._load_reranker()
 
+    def _load_reranker(self):
+        """Load reranker only if enabled."""
+        rerank_cfg = self.config.get("reranker", {})
 
-    def _init_reranker(self):
-        try:
-            rcfg = self.config["reranker"]
-            model_name = rcfg["model_name"]
-            dtype = torch.bfloat16 if rcfg.get(
-                "torch_dtype") == "bfloat16" else torch.float32
+        if not rerank_cfg.get("enabled", False):
+            log.info("Reranker disabled.")
+            return None
 
-            log.info("Loading BGE reranker",model=model_name, dtype=str(dtype))
+        model_name = rerank_cfg.get("model_name", "BAAI/bge-reranker-base")
 
-            self.reranker = CrossEncoder(
-                model_name,
-                model_kwargs={"torch_dtype": dtype},
-                max_length=512,
-            )
+        dtype = torch.float32
 
-            log.info("BGE reranker loaded successfully")
-        except Exception as e:
-            log.error("Failed to load reranker", error=str(e))
-            raise e
+        log.info(f"Loading RERANKER: {model_name} using dtype={dtype}")
+
+        model = CrossEncoder(
+            model_name,
+            model_kwargs={"torch_dtype": dtype},
+            max_length=512,
+            default_activation_function=None
+        )
+
+        log.info("Reranker loaded successfully", model = model)
+        return model
 
     def get_reranker(self):
+        """Return the loaded reranker (or None)."""
         return self.reranker
 
     def load_embeddings(self):

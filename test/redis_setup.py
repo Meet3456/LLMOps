@@ -27,5 +27,4 @@ value = r.get("framework")
 print(f"Stored value for frameweok: {value.decode()}")
 '''
 
-# 
-app = FastAPI()
+app = FastAPI() 

@@ -21,18 +21,12 @@ def run_end_to_end(index_path: str):
 
         # Define test turns
         conversation_turns = [
-            # Turn 1
-            " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
-
-            # Turn 2 (RAG)
+            # " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
             # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?"
-
-            # # Turn 3 (Tools)
             # "Give complete information about Training Data and Batching",
-
-            # # Turn 4 (Follow-up → contextual rewrite test)
-            # "what was the rate pf residual dropout used?" 
-        ]
+            # "what was the rate pf residual dropout used?",
+            "list all the layers and there corresponding Complexity per Layer and Maximum Path Length" 
+        ] 
 
         for i, user_query in enumerate(conversation_turns, start=1):
 
@@ -69,4 +63,4 @@ if __name__ == "__main__":
     # Change index path according to your setup
     DEFAULT_INDEX = "faiss_index/session_18_nov_2025_3:54_pm_5d9f"
 
-    run_end_to_end(DEFAULT_INDEX)
+    run_end_to_end(DEFAULT_INDEX) 
