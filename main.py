@@ -23,9 +23,12 @@ def run_end_to_end(index_path: str):
         conversation_turns = [
             # " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
             # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?"
-            # "Give complete information about Training Data and Batching",
-            # "what was the rate pf residual dropout used?",
-            "list all the layers and there corresponding Complexity per Layer and Maximum Path Length" 
+            # "what hurts the model quality",
+            "Summarize the table , Table 2: The Transformer achieves better BLEU scores",
+            # "Details about the Optimizer",
+            "BLEU scores of English-to-French newstest2014 test",
+            # "summarise Results are on Section 23 of WSJ"
+            "list all the parsers,there training and resulting score"
         ] 
 
         for i, user_query in enumerate(conversation_turns, start=1):
@@ -63,4 +66,4 @@ if __name__ == "__main__":
     # Change index path according to your setup
     DEFAULT_INDEX = "faiss_index/session_18_nov_2025_3:54_pm_5d9f"
 
-    run_end_to_end(DEFAULT_INDEX) 
+    run_end_to_end(DEFAULT_INDEX)  

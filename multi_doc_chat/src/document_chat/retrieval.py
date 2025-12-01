@@ -57,11 +57,9 @@ class RetrieverWrapper:
         """
         try:
 
-            top_k_for_check = self.reranker_config.get(
-                "top_k_routing",
-                self.retriever_config.get("top_k",10)
-            )
-            # Retrieve documents with similarity scores - Faiss top-k
+            top_k_for_check = self.reranker_config.get("top_k_routing",8)
+
+            # Retrieve documents with similarity scores - top_k_for_check
             docs_with_scores = self.vectorestore.similarity_search_with_score(query, k=top_k_for_check)
 
             num_docs = len(docs_with_scores)
@@ -103,7 +101,7 @@ class RetrieverWrapper:
         
             # If no reranker installed → fallback to FAISS thresholding
             log.info("Reranked disabled - applying basic faiss thresholding logic")
-            is_relevant = best_faiss <= self.config.get("score_threshold", 0.55)
+            is_relevant = best_faiss <= self.retriever_config.get("score_threshold", 0.55)
             self.last_best_distance = best_faiss
             return is_relevant, best_faiss
         
@@ -126,11 +124,11 @@ class RetrieverWrapper:
 
             rerank_enabled = self.reranker_config.get("enabled", False) and self.reranker is not None
 
-            fetch_k = self.reranker_config.get("top_k_retrieval")
-            final_k = self.reranker_config.get("final_k")
-
-            fetch_k_mmr = self.retriever_config.get("fetch_k",35)
-            top_k_for_mmr = self.retriever_config.get("top_k",10)
+            fetch_k = self.reranker_config.get("top_k_retrieval") # 25
+            final_k = self.reranker_config.get("final_k") # 6
+            
+            fetch_k_mmr = self.retriever_config.get("fetch_k",35) # 35
+            top_k_for_mmr = self.retriever_config.get("top_k",10) # 8
 
             # MMR (Maximal Marginal Relevance) for diversity
             if self.retriever_config.get("search_type") == "mmr":

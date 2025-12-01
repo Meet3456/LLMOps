@@ -3,7 +3,7 @@ embedding_model:
   model_name: "models/text-embedding-004"
 
 retriever:
-  top_k: 10
+  top_k: 8
   search_type: "mmr"
   fetch_k: 35
   lambda_mult: 0.5 
@@ -18,9 +18,9 @@ groq:
 reranker:
   enabled: true
   model_name: "BAAI/bge-reranker-v2-m3"
-  top_k_routing: 10      # number of docs used in routing quick check
+  top_k_routing: 8      # number of docs used in routing quick check
   top_k_retrieval: 25    # number of docs fetched from FAISS before reranking
-  final_k: 5            # final docs sent to RAG LLM
+  final_k: 6            # final docs sent to RAG LLM 
   torch_dtype: "float32"
 
 llm:
@@ -45,7 +45,8 @@ llm:
   reasoning:
     provider: "groq"
     model_name: "qwen/qwen3-32b"
-    temperature: 0.5
+    temperature: 0.6
+    top_p: 0.95
     max_tokens: 4096
     reasoning_format: "parsed"     # parsed | raw | hidden
     reasoning_effort: "default"    # only for Qwen → none | default

@@ -73,12 +73,11 @@ class ModelLoader:
 
         model = CrossEncoder(
             model_name,
-            model_kwargs={"torch_dtype": dtype},
+            model_kwargs={"dtype": dtype},
             max_length=512,
-            default_activation_function=None
         )
 
-        log.info("Reranker loaded successfully", model = model)
+        log.info("Reranker loaded successfully")
         return model
 
     def get_reranker(self):
@@ -153,15 +152,17 @@ class ModelLoader:
                 log.info("Loading reasoning model")
                 reasoning_effort = llm_config.get("reasoning_effort")
                 reasoning_format = llm_config.get("reasoning_format")
+                top_p = llm_config.get("top_p")
 
                 # GPT-OSS *must not* receive model_kwargs
                 return ChatGroq(
-                    model=model,
-                    api_key=api_key,
-                    temperature=temp,
-                    max_tokens=max_t,
-                    reasoning_effort=reasoning_effort,   # low|medium|high
-                    reasoning_format=reasoning_format  # true/false
+                    model = model,
+                    api_key = api_key,
+                    temperature = temp,
+                    max_tokens = max_t,
+                    reasoning_effort = reasoning_effort,   # low|medium|high
+                    reasoning_format = reasoning_format,  # true/false
+                    model_kwargs={"top_p": top_p} if top_p is not None else None
                 )
             
             model_kwargs = {}

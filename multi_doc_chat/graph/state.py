@@ -1,6 +1,5 @@
 from typing import TypedDict, List, Any , Literal
 
-
 class GraphState(TypedDict):
     input: str
     chat_history: List[Any]
