@@ -9,12 +9,19 @@ retriever:
   lambda_mult: 0.5 
   score_threshold: 0.6
  
-groq:
+groq: 
   # two keys: one for compound/tools, one for rag/reasoning/multimodal
   api_keys:
     default_env: "GROQ_API_KEY_DEFAULT"
     compound_env: "GROQ_API_KEY_COMPOUND"
 
+reanker:
+  enabled: true
+  model_name: "BAAI/bge-reranker-large"
+  top_k_routing: 25      # number of docs used in routing quick check
+  top_k_retrieval: 50    # number of docs fetched from FAISS before reranking
+  final_k: 7             # final docs sent to RAG LLM
+  torch_dtype: "bfloat16"
 
 llm:
   # ROUTER: High speed, specific JSON structure
