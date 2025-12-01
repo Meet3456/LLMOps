@@ -7,7 +7,8 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_groq import ChatGroq
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
-
+from sentence_transformers import CrossEncoder
+import torch
 
 
 class ApiKeyManager:
@@ -54,6 +55,33 @@ class ModelLoader:
         self.config = load_config()
         log.info("YAML config loaded", config_keys=list(self.config.keys()))
 
+        self.reranker = None
+        if self.config.get("reranker", {}).get("enabled", False):
+            self._init_reranker()
+
+
+    def _init_reranker(self):
+        try:
+            rcfg = self.config["reranker"]
+            model_name = rcfg["model_name"]
+            dtype = torch.bfloat16 if rcfg.get(
+                "torch_dtype") == "bfloat16" else torch.float32
+
+            log.info("Loading BGE reranker",model=model_name, dtype=str(dtype))
+
+            self.reranker = CrossEncoder(
+                model_name,
+                model_kwargs={"torch_dtype": dtype},
+                max_length=512,
+            )
+
+            log.info("BGE reranker loaded successfully")
+        except Exception as e:
+            log.error("Failed to load reranker", error=str(e))
+            raise e
+
+    def get_reranker(self):
+        return self.reranker
 
     def load_embeddings(self):
         """

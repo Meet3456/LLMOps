@@ -25,9 +25,11 @@ class RetrieverWrapper:
         * 0.5 = balanced approach (recommended)
     """
 
-    def __init__(self, vectorestore, config):
+    def __init__(self, vectorestore, model_loader, config):
         self.vectorestore = vectorestore
         self.config = config
+        self.model_loader = model_loader
+        self.reranker = model_loader.get_reranker()
 
         # Last best distance from quick doc-check
         self.last_best_distance: Optional[float] = None
@@ -45,13 +47,18 @@ class RetrieverWrapper:
             Tuple of (is_query_relevant_to_document: bool, relevance_score: Optional[float] or none)
         """
         try:
+            
+            rerank_enabled = self.config.get("reranker", {}).get("enabled", False)
+            k = self.config.get("reranker", {}).get("top_k_routing", 25)
+
             # Fetch the top_k from config for relevance check and default to 3
-            top_k_for_check = min(7 , self.config.get("top_k") or 7)
+            # top_k_for_check = min(7 , self.config.get("top_k") or 7)
 
             # Retrieve documents with similarity scores
             docs_with_similarity_scores = self.vectorestore.similarity_search_with_score(
                 query,
-                k=top_k_for_check
+                # k= top_k_for_check
+                k = k
             )
 
             num_docs = len(docs_with_similarity_scores)
@@ -64,11 +71,12 @@ class RetrieverWrapper:
                 return False, None
 
             # get the best score by iterating over docs_with_similarity_scores
+            '''
             scores = [float(s) for _ , s in docs_with_similarity_scores]
             best_distance = min(scores)
 
             # Assign the value to last best distance
-            self.last_best_distance = best_distance
+            self.last_best_distance = best_distance 
 
             log.info("Doc-check FAISS distances", scores=scores)
             log.info("Doc-check best distance", best_distance=best_distance)
@@ -79,6 +87,32 @@ class RetrieverWrapper:
             log.info("Doc-check match result", is_relevant_to_document=is_match)
 
             return is_match, best_distance
+            '''
+            docs, faiss_scores = zip(*docs_with_similarity_scores)
+            best_distance = min(faiss_scores)
+            self.last_best_distance = best_distance
+
+            if not rerank_enabled:
+                threshold = self.config.get("score_threshold", 0.55)
+                is_rel = best_distance <= threshold
+                log.info("Routing relevance",
+                         faiss_best=best_distance, relevant=is_rel)
+                return is_rel, best_distance
+
+            # 1B) RERANK top-k FAISS docs
+            pairs = [(query, d.page_content) for d in docs]
+            rerank_scores = self.reranker.predict(pairs)
+
+            best_rerank = float(max(rerank_scores))
+
+            log.info("Routing reranker results",
+                     best_distance=best_distance,
+                     best_rerank_score=best_rerank)
+
+            # reranker score threshold ~0.5 recommended for BGE large
+            is_relevant = best_rerank > 0.45
+
+            return is_relevant, best_rerank
         
         except Exception as e:
             log.error(f"Relevance check failed: {e}")
