@@ -15,7 +15,6 @@ app = FastAPI()
  
 API_KEY = "my-secret-key"
 
-
 def get_api_key_env_file(api_key: str = Header(...)):
     if api_key != settings.api_key:
         raise HTTPException(status_code=403, detail="unauthorized")
@@ -37,22 +36,46 @@ def get_data(api_key: str = Depends(get_api_key_env_file)):
     # if api_key is valid the function will return successfull response
     return {"output":"Access Granted"}
 
-# cache lvl1 -> cache lvl2 -> RAM Memory -> Mass Storage(hard disk = permanent storage)
-# reduces latency(response time)
-# reduces load on backend and increases scalability
-# use case : api responses - slow or rate limited third party api calls are cached to avoid repeated calls , session data
-# types of caching : client side : Done in broswer or fronted usiong mechanisms like HTTP Headers(Cache control)
-#                    server side : using redis , memcached or in memory dictionaries
-# Redis - in memory key-value store , Memcached , Fast api decorator - lru_cache
 
-# Redis : Remote Dictionary Server in memory data structure store ,stores everything in memory which allows fast read and write ops
-# Key-value db : stores value similar to python dict , Cache : used to cache db queries,api responses, and ML model responses
-# No dis i/o during read/writes , single threaded
-# Data persistence through : RDB(Redis db backup)
-# AOF(Append only File) : logs every write operation
 
-# Redis Data Structure:
-# string , list ,  set, sorted set , Hash , stream
-# Pub/Sub - Publishing subsribing messaging system , Bitmaps
-# Caching , Session Management , Rate limiting , Real-time analytics , leaderboard and ranking systems
+'''
+- FastAPI is already fully concurrent - By keeping the routes async 
+    [async def upload() ; async def chat()]
 
+- As Data Ingestion for Faiss Creation and RAG Operations are CPU Heavy-  Not running them in event loop
+  Thats why we use:
+    [await run_sync(ingestor.built_retriver, ...) ; await run_sync(orchestrator.run_rag, ...)]
+  Each user’s ingestion and chatting run on threadpool workers.
+
+- IO_POOL = ThreadPoolExecutor(max_workers=32)
+  This means:
+    Up to 32 ingestion jobs can run at the same time.
+    Up to 32 RAG/Groq calls can run at the same time.
+    FAISS search + reranker + embeddings → offloaded from the event loop.
+
+- index_path = f"faiss_index/{session_id}"
+  Meaning:
+    Each active user has their own FAISS index.
+
+- if session_id not in self.cache:
+    self.cache[session_id] = Orchestrator(index_path=f"faiss_index/{session_id}")
+
+    This means:
+        Each user gets a fully isolated orchestrator.
+
+    Each orchestrator has:
+        Its own retriever
+        Its own FAISS instance
+        Its own reranker
+        Its own config
+        Multiple orchestrators run concurrently → No shared state → No blocking.
+
+    ➤ 5 users = 5 orchestrators = perfect concurrency.
+
+- BenchMarking API's:
+    - Latency
+    - Throughput
+    - Concurrency Handling
+    - Error Rates
+    - Resource Usage
+'''

@@ -1,13 +1,11 @@
 import json
 import traceback
 from typing import List
-
+import re
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
-
 from langchain_community.vectorstores import FAISS
 from langchain_core.output_parsers import StrOutputParser
-
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.utils.model_loader import ModelLoader
 from multi_doc_chat.src.document_chat.retrieval import RetrieverWrapper
@@ -114,7 +112,7 @@ class Orchestrator:
                 w in q_lower for w in ["solve", "calculate", "compute", "evaluate"]
             )
             asks_for_latest = any(
-                kw in q_lower for kw in ["latest", "today", "current",]
+                kw in q_lower for kw in ["latest", "today", "current","who won"]
             )
 
             token_approx = len(q_lower.split())
@@ -142,10 +140,13 @@ class Orchestrator:
         - "rag","reasoning","tools"
         """
         try:
+            # Built the signals based on the user query:
             signals = self._built_routing_signals(query)
 
+            # Initialize the chain
             chain = self.router_prompt | self.router_llm
 
+            # Invoke the chain with necessary inputs
             result = chain.invoke(
                 {
                     "input":query,
@@ -229,13 +230,12 @@ class Orchestrator:
         try:
             resp = self.reasoning_llm.invoke([{"role": "user", "content": query}])
             # Extract final answer
-            content = resp.content or ""
+            content = getattr(resp, "content", "") or ""
+            log.info("Content from the llmreasoning response:", content = content)
 
             # Extract reasoning (Qwen stores it inside response_metadata)
-            reasoning = (
-                resp.response_metadata.get("reasoning_content")
-                if hasattr(resp, "response_metadata") else None
-            )
+            if hasattr(resp , "additional_kwargs"):
+                reasoning = resp.additional_kwargs.get("reasoning_content")
 
             log.info("Reasoning response", has_reasoning=reasoning is not None)
 

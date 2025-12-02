@@ -2,14 +2,11 @@ import sys
 import os
 from operator import itemgetter
 from typing import List, Optional, Dict, Any , Tuple
-
 from langchain_core.documents import Document
-
 from multi_doc_chat.utils.model_loader import ModelLoader
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 import numpy as np
-
 
 class RetrieverWrapper:
     """
@@ -153,8 +150,10 @@ class RetrieverWrapper:
             scores = self.reranker.predict(pairs)
             scores = [float(s) for s in scores]
 
+            # create a reranked list of docs and corresponding scores (sort them in descending order)
             reranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
 
+            # Get the top 5 reranked docs:
             final_docs = [d for d, s in reranked[:final_k]]
 
             log.info("Final reranked retrieval", final_count=len(final_docs))

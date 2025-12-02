@@ -21,14 +21,15 @@ def run_end_to_end(index_path: str):
 
         # Define test turns
         conversation_turns = [
-            # " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
+            " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
             # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?"
             # "what hurts the model quality",
-            "Summarize the table , Table 2: The Transformer achieves better BLEU scores",
+            # "Summarize the table , Table 2: The Transformer achieves better BLEU scores",
             # "Details about the Optimizer",
-            "BLEU scores of English-to-French newstest2014 test",
+            # "BLEU scores of English-to-French newstest2014 test",
             # "summarise Results are on Section 23 of WSJ"
-            "list all the parsers,there training and resulting score"
+            # "list all the parsers,there training and resulting score"
+            "who recently scored a century against SA in odi match"
         ] 
 
         for i, user_query in enumerate(conversation_turns, start=1):

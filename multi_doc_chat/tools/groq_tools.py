@@ -49,7 +49,7 @@ class GroqToolClient:
                         }
                     },
                     max_tokens=max_tokens,
-                    stream=stream,
+                    stream=stream
                 )
 
                 msg = resp.choices[0].message
