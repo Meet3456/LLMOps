@@ -1,14 +1,14 @@
-'''
+"""
 Helps to identify performance Bottlenecks in Business logic and API Calls
 Minimize Latency and maximize Throughput
 Reduce CPU , memory usage and I/O Wait times
 Make informed architecture decisions (eg - sync and async)
 Prepare Scalable API's
-'''
+"""
 
 # Profiling using cProfile
 
-'''
+"""
 For each request it makes a profile(you can say file) - which contains various details abouy no of calls,time
 Cannot directly open the file - we use
 
@@ -20,10 +20,10 @@ Cannot directly open the file - we use
 
 Each time a xcall is made to the request a Profile is created
 Request - action - profile creation - we use middleware
-'''
+"""
 
 # Example:
-'''
+"""
 import os
 import time
 import cProfile
@@ -70,10 +70,10 @@ async def compute():
     result = sum((i*2) for i in range(1000))
     return JSONResponse({"Result":result})
 
-'''
+"""
 
 # Profiling using Line-Profiler
-'''
+"""
 
 
-'''
+"""

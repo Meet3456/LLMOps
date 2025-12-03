@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import sqlite3
 
-'''
+"""
 # Connects python code to redis
 r = redis.Redis(host="localhost" , port=6379 , db=0)
 
@@ -25,9 +25,9 @@ r.set("framework","FastAPI")
 value = r.get("framework")
 
 print(f"Stored value for frameweok: {value.decode()}")
-'''
+"""
 
-'''
+"""
 Why is Caching Important?
     • Reduces Latency: Cached responses are served from nearby or in-memory storage, which is significantly faster than from a
       database or an external API call
@@ -38,9 +38,9 @@ Why is Caching Important?
       party APIs is minimized
 
     • Scalability: Helps applications scale better under high load, as the same data doesn't need to be processed repeatedly
-'''
+"""
 
-'''
+"""
 cache lvl1 -> cache lvl2 -> RAM Memory -> Mass Storage(hard disk = permanent storage)
 reduces latency(response time)
 reduces load on backend and increases scalability
@@ -60,4 +60,4 @@ string , list ,  set, sorted set , Hash , stream
 Pub/Sub - Publishing subsribing messaging system , Bitmaps
 Caching , Session Management , Rate limiting , Real-time analytics , leaderboard and ranking systems
 
-'''
+"""
