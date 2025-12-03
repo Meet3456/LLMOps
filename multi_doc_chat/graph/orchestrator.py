@@ -17,8 +17,9 @@ from multi_doc_chat.exception.custom_exception import DocumentPortalException
 # Route query class
 class RouteQuery(BaseModel):
     source: Literal["rag", "tools", "reasoning"] = Field(
-        ... , description="Which agent should handle this query."
+        ..., description="Which agent should handle this query."
     )
+
 
 class Orchestrator:
     """
@@ -45,30 +46,31 @@ class Orchestrator:
 
         log.info("Orchestrator initialized successfully")
 
-
     # Function which initializes retriever:
-    def _init_retriever(self, index_path:str):
+    def _init_retriever(self, index_path: str):
         # load embedddings
         embeddings = self.model_loader.load_embeddings()
 
         # Load vectorestore(faiss local)
         vectorestore = FAISS.load_local(
-            index_path,
-            embeddings,
-            allow_dangerous_deserialization=True
+            index_path, embeddings, allow_dangerous_deserialization=True
         )
-        
+
         # get the retriever config(which is mmr , can be changed as per req):
         retriever_config = self.config.get("retriever", {})
 
         # get the reranker model config:
-        reranker_cfg = self.config.get("reranker", {}) 
+        reranker_cfg = self.config.get("reranker", {})
 
-        # get the retriever object which is returned by the RetrieverWrapper Class 
+        # get the retriever object which is returned by the RetrieverWrapper Class
         # retriever attribute has 2 methods - {"quick_relevance_check" and "retrieve"}
-        self.retriever = RetrieverWrapper(vectorestore=vectorestore , model_loader=self.model_loader ,retriever_config=retriever_config , reranker_config=reranker_cfg)
+        self.retriever = RetrieverWrapper(
+            vectorestore=vectorestore,
+            model_loader=self.model_loader,
+            retriever_config=retriever_config,
+            reranker_config=reranker_cfg,
+        )
         log.info("Retriever initialized successfully")
-
 
     # Function which initializes llms
     def _init_models(self):
@@ -86,7 +88,6 @@ class Orchestrator:
         self.reasoning_llm = self.model_loader.load_llm("reasoning")
         log.info("All llm's initialized successfully")
 
-
     # gets api keys from model loader and initializes GrogToolCient:
     def _init_tools(self):
         self.tools_client = GroqToolClient(
@@ -96,15 +97,16 @@ class Orchestrator:
             ]
         )
         log.info("Tools llm initialized successfully")
-        
 
     # Builds signals(bases on query) for helping llm for routing
-    def _built_routing_signals(self , query:str):
+    def _built_routing_signals(self, query: str):
         try:
             q_lower = query.lower()
 
             # Doc-check via FAISS , quick_relevance_check = returns a boolean whether is_query_relevant_to_document and the relevance_scorem distance(minimum)
-            is_query_relevant_to_document , best_distance = self.retriever.quick_relevance_check(query)
+            is_query_relevant_to_document, best_distance = (
+                self.retriever.quick_relevance_check(query)
+            )
 
             contains_url = "http://" in q_lower or "https://" in q_lower
 
@@ -112,7 +114,7 @@ class Orchestrator:
                 w in q_lower for w in ["solve", "calculate", "compute", "evaluate"]
             )
             asks_for_latest = any(
-                kw in q_lower for kw in ["latest", "today", "current","who won"]
+                kw in q_lower for kw in ["latest", "today", "current", "who won"]
             )
 
             token_approx = len(q_lower.split())
@@ -130,8 +132,9 @@ class Orchestrator:
             return signals
         except Exception as e:
             log.error("Failed to generate routing signals", error=str(e))
-            raise DocumentPortalException("Error in genereating routing signals", e) from e
-    
+            raise DocumentPortalException(
+                "Error in genereating routing signals", e
+            ) from e
 
     # Based on signals and router llm retruns the routed node:
     def route_query(self, query: str, chat_history: List):
@@ -147,27 +150,21 @@ class Orchestrator:
             chain = self.router_prompt | self.router_llm
 
             # Invoke the chain with necessary inputs
-            result = chain.invoke(
-                {
-                    "input":query,
-                    "signals":json.dumps(signals)
-                }
-            )
-            log.info("Routing llm result",langchain_result = result)
+            result = chain.invoke({"input": query, "signals": json.dumps(signals)})
+            log.info("Routing llm result", langchain_result=result)
             selected_route = result.source
-            log.info("Router LLM result", route_selected = selected_route)
+            log.info("Router LLM result", route_selected=selected_route)
             return selected_route
         except Exception as e:
             log.error("Failed to find the selected route", error=str(e))
             return "reasoning"
-            
-    
+
     # Function which runs the rag pipeline(if rourted to rag node):
     def run_rag(self, query: str, chat_history: List):
         try:
             # Initialize the rag llm:
             llm = self.rag_llm
-            '''
+            """
             # Rewrite the user query wrt to chat_history(if present)
             if chat_history:
                 rewrite_query_chain = (
@@ -183,12 +180,12 @@ class Orchestrator:
             else:
                 log.info("no chat_history passing default user input query")
                 rewritten_query = query
-            '''
+            """
             # Retrieve relevant docs with mmr search from the faiss index
             docs = self.retriever.retrieve(query)
 
             len_docs = len(docs)
-            log.info("Lenght of retrieved docs from vectorestore",docs = len_docs)
+            log.info("Lenght of retrieved docs from vectorestore", docs=len_docs)
 
             if not docs:
                 log.info("RAG: no documents retrieved")
@@ -201,40 +198,29 @@ class Orchestrator:
             context = "\n\n".join(getattr(d, "page_content", str(d)) for d in docs)
 
             # Final qa chain:
-            qa_chain = (
-                self.qa_prompt
-                | llm
-                | StrOutputParser()
-            )
+            qa_chain = self.qa_prompt | llm | StrOutputParser()
 
             answer = qa_chain.invoke(
-                {
-                    "context": context,
-                    "input": query,
-                    "chat_history": chat_history
-                }
+                {"context": context, "input": query, "chat_history": chat_history}
             )
             return answer
 
         except Exception as e:
             log.error(
-                "Rag pipeline error",
-                error = str(e),
-                traceback = traceback.format_exc()
+                "Rag pipeline error", error=str(e), traceback=traceback.format_exc()
             )
-            raise DocumentPortalException("error in run rag function",e) from e
-        
-    
+            raise DocumentPortalException("error in run rag function", e) from e
+
     # Function ehich runs the reasoning pipeline(if routed to reasoning node)
     def run_reasoning(self, query: str):
         try:
             resp = self.reasoning_llm.invoke([{"role": "user", "content": query}])
             # Extract final answer
             content = getattr(resp, "content", "") or ""
-            log.info("Content from the llmreasoning response:", content = content)
+            log.info("Content from the llmreasoning response:", content=content)
 
             # Extract reasoning (Qwen stores it inside response_metadata)
-            if hasattr(resp , "additional_kwargs"):
+            if hasattr(resp, "additional_kwargs"):
                 reasoning = resp.additional_kwargs.get("reasoning_content")
 
             log.info("Reasoning response", has_reasoning=reasoning is not None)
@@ -251,7 +237,6 @@ class Orchestrator:
                 traceback=traceback.format_exc(),
             )
             return f"Reasoning error: {str(e)}"
-        
 
     # Function ehich runs the tool pipeline(if routed to tool node)
     def run_tools(self, query: str):

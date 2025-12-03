@@ -1,4 +1,5 @@
-from typing import TypedDict, List, Any , Literal
+from typing import TypedDict, List, Any, Literal
+
 
 class GraphState(TypedDict):
     input: str

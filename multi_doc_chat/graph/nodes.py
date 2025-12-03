@@ -8,8 +8,8 @@ Graph wiring is done in graph_builder.
 
 
 # Appends the current step into existing steps in the state
-def _append_step(state,step):
-    steps = state.get("steps",[])
+def _append_step(state, step):
+    steps = state.get("steps", [])
     return steps + [step]
 
 
@@ -31,10 +31,7 @@ def router_node(state):
 
     log.info("Router node decision", route=routing_decision)
 
-    return{
-        "route":routing_decision,
-        "steps":_append_step(state, "router")
-    }
+    return {"route": routing_decision, "steps": _append_step(state, "router")}
 
 
 def rag_node(state):

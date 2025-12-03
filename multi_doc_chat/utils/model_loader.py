@@ -91,8 +91,9 @@ class ModelLoader:
         try:
             model_name = self.config["embedding_model"]["model_name"]
             log.info("Loading embedding model", model=model_name)
-            return GoogleGenerativeAIEmbeddings(model=model_name,
-                                                google_api_key=self.api_keys.get("GOOGLE_API_KEY"))
+            return GoogleGenerativeAIEmbeddings(
+                model=model_name, google_api_key=self.api_keys.get("GOOGLE_API_KEY")
+            )
         except Exception as e:
             log.error("Error loading embedding model", error=str(e))
             raise DocumentPortalException("Failed to load embedding model", sys)
@@ -103,7 +104,7 @@ class ModelLoader:
         Select appropriate Groq API key based on role.
         Args:
             role: One of "rag", "reasoning", or "tools"
-            
+
         Returns:
             API key string
         """
@@ -117,7 +118,7 @@ class ModelLoader:
         Load and return the configured LLM model.
         Args:
             role: One of "rag", "reasoning", or "tools"
-            
+
         Returns:
             Configured LLM instance
         """
@@ -145,7 +146,6 @@ class ModelLoader:
             )
 
         if provider == "groq":
-
             api_key = self._select_groq_key(role)
 
             if role == "reasoning":
@@ -156,15 +156,15 @@ class ModelLoader:
 
                 # GPT-OSS *must not* receive model_kwargs
                 return ChatGroq(
-                    model = model,
-                    api_key = api_key,
-                    temperature = temp,
-                    max_tokens = max_t,
-                    reasoning_effort = reasoning_effort,   # low|medium|high
-                    reasoning_format = reasoning_format,  # true/false
-                    model_kwargs={"top_p": top_p} if top_p is not None else None
+                    model=model,
+                    api_key=api_key,
+                    temperature=temp,
+                    max_tokens=max_t,
+                    reasoning_effort=reasoning_effort,  # low|medium|high
+                    reasoning_format=reasoning_format,  # true/false
+                    model_kwargs={"top_p": top_p} if top_p is not None else None,
                 )
-            
+
             model_kwargs = {}
 
             top_p = llm_config.get("top_p")
@@ -185,9 +185,9 @@ class ModelLoader:
                     api_key=api_key,
                     temperature=temp,
                     max_tokens=max_t,
-                    model_kwargs=model_kwargs  # safe
+                    model_kwargs=model_kwargs,  # safe
                 )
-            
+
             # default groq llm loading(router,tools)
             return ChatGroq(
                 model=model,

@@ -3,6 +3,7 @@ from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 import sys
 
+
 class GroqToolClient:
     """
     Multi-key failover client for Compound / Compound-Mini.
@@ -31,7 +32,9 @@ class GroqToolClient:
         self.client = self._make(self.api_keys[self.idx])
         log.warning("Rotated Groq API key", new_index=self.idx)
 
-    def call_compound(self, user_prompt, model, enabled_tools, max_tokens, stream=False):
+    def call_compound(
+        self, user_prompt, model, enabled_tools, max_tokens, stream=False
+    ):
         """
         Only valid compound params:
         - reasoning_format (parsed | raw | hidden)
@@ -49,7 +52,7 @@ class GroqToolClient:
                         }
                     },
                     max_tokens=max_tokens,
-                    stream=stream
+                    stream=stream,
                 )
 
                 msg = resp.choices[0].message

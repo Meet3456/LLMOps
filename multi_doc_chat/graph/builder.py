@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+
 # Importing the nodes:
 from multi_doc_chat.graph.nodes import (
     router_node,
@@ -25,7 +26,7 @@ def build_graph():
     # conditional routing
     graph.add_conditional_edges(
         "router",
-        lambda state: state["route"], 
+        lambda state: state["route"],
         {
             "rag": "rag",
             "reasoning": "reasoning",
