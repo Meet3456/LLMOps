@@ -156,10 +156,6 @@ class RetrieverWrapper:
             List of relevant Document objects
         """
         try:
-            rerank_enabled = (
-                self.reranker_config.get("enabled", False) and self.reranker is not None
-            )
-
             fetch_k = self.reranker_config.get("top_k_retrieval")  # 25
             final_k = self.reranker_config.get("final_k")  # 6
 

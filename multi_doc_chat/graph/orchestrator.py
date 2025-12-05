@@ -1,17 +1,18 @@
 import json
 import traceback
 from typing import List
-import re
-from pydantic import BaseModel, Field
-from typing_extensions import Literal
+
 from langchain_community.vectorstores import FAISS
 from langchain_core.output_parsers import StrOutputParser
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
-from multi_doc_chat.utils.model_loader import ModelLoader
-from multi_doc_chat.src.document_chat.retrieval import RetrieverWrapper
-from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
-from multi_doc_chat.tools.groq_tools import GroqToolClient
+from pydantic import BaseModel, Field
+from typing_extensions import Literal
+
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
+from multi_doc_chat.src.document_chat.retrieval import RetrieverWrapper
+from multi_doc_chat.tools.groq_tools import GroqToolClient
+from multi_doc_chat.utils.model_loader import ModelLoader
 
 
 # Route query class
@@ -98,7 +99,7 @@ class Orchestrator:
         )
         log.info("Tools llm initialized successfully")
 
-    # Builds signals(bases on query) for helping llm for routing
+    # Builds signals(bases on user query) for helping llm for routing
     def _built_routing_signals(self, query: str):
         try:
             q_lower = query.lower()
@@ -114,7 +115,8 @@ class Orchestrator:
                 w in q_lower for w in ["solve", "calculate", "compute", "evaluate"]
             )
             asks_for_latest = any(
-                kw in q_lower for kw in ["latest", "today", "current", "who won","recently",""]
+                kw in q_lower
+                for kw in ["latest", "today", "current", "who won", "recently", ""]
             )
 
             token_approx = len(q_lower.split())
@@ -152,8 +154,10 @@ class Orchestrator:
             # Invoke the chain with necessary inputs
             result = chain.invoke({"input": query, "signals": json.dumps(signals)})
             log.info("Routing llm result", langchain_result=result)
+
             selected_route = result.source
             log.info("Router LLM result", route_selected=selected_route)
+
             return selected_route
         except Exception as e:
             log.error("Failed to find the selected route", error=str(e))
