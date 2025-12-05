@@ -1,6 +1,8 @@
 import traceback
+
 from multi_doc_chat.graph.orchestrator import Orchestrator
-from multi_doc_chat.logger import GLOBAL_LOGGER as log 
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
+
 
 def print_block(title, content):
     print("\n" + "=" * 80)
@@ -8,6 +10,15 @@ def print_block(title, content):
     print("=" * 80)
     print(content)
     print("=" * 80 + "\n")
+
+
+def test_formatting():
+    pass
+
+
+def testing_again():
+    pass
+
 
 def run_end_to_end(index_path: str):
     try:
@@ -21,19 +32,21 @@ def run_end_to_end(index_path: str):
 
         # Define test turns
         conversation_turns = [
-            " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
-            # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?"
-            # "what hurts the model quality",
+            # " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
+            # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?",
+            # "what hurts the model quality with respect to model variations in transformers",
             # "Summarize the table , Table 2: The Transformer achieves better BLEU scores",
             # "Details about the Optimizer",
             # "BLEU scores of English-to-French newstest2014 test",
             # "summarise Results are on Section 23 of WSJ"
-            # "list all the parsers,there training and resulting score"
-            "who recently scored a century against SA in odi match"
+            # "list all the parsers,there training and resulting score",
+            # "who recently scored a century against SA in odi match",
+            # "detail summary of machine translation section",
+            # "scorecard or recent ind vs sa odi match"
+            "no of players who scored century in recent ind vs sa match"
         ] 
 
         for i, user_query in enumerate(conversation_turns, start=1):
-
             print_block(f"🧠 TURN {i}: USER QUERY", user_query)
 
             # 1. ROUTE THE QUERY
@@ -63,8 +76,9 @@ def run_end_to_end(index_path: str):
         print_block("❌ ERROR DURING END-TO-END TEST", str(e))
         print(traceback.format_exc())
 
+
 if __name__ == "__main__":
     # Change index path according to your setup
     DEFAULT_INDEX = "faiss_index/session_18_nov_2025_3:54_pm_5d9f"
 
-    run_end_to_end(DEFAULT_INDEX)  
+    run_end_to_end(DEFAULT_INDEX)

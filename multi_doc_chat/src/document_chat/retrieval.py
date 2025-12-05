@@ -1,7 +1,10 @@
+import math
 from typing import List, Optional, Tuple
+
 from langchain_core.documents import Document
-from multi_doc_chat.utils.model_loader import ModelLoader
+
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.utils.model_loader import ModelLoader
 
 
 class RetrieverWrapper:
@@ -51,7 +54,7 @@ class RetrieverWrapper:
             Tuple of (is_query_relevant_to_document: bool, relevance_score: Optional[float] or none)
         """
         try:
-            top_k_for_check = self.reranker_config.get("top_k_routing", 8)
+            top_k_for_check = self.reranker_config.get("top_k_routing", 10)
 
             # Retrieve documents with similarity scores - top_k_for_check
             docs_with_scores = self.vectorestore.similarity_search_with_score(
@@ -69,6 +72,11 @@ class RetrieverWrapper:
 
             faiss_scores = [float(s) for _, s in docs_with_scores]
             best_faiss = min(faiss_scores)
+
+            # converting the best faiss distance to similarity:
+            faiss_sim = 1 / (1 + best_faiss)
+
+            log.info("fAISS normalized similarity score : ", faiss_sim=faiss_sim)
 
             log.info(
                 "Doc-check (FAISS)",
@@ -95,21 +103,42 @@ class RetrieverWrapper:
                     best_reranked_Score=best_rerank,
                 )
 
+                # Convert reranker output to normalized similarity
+                rerank_sim = 1 / (1 + math.exp(-best_rerank))
+                log.info(
+                    "Rerankers normalized similarit score : ", rerank_sim=rerank_sim
+                )
+
                 # FINAL relevance decision (reranker dominates FAISS)
-                is_relevant = best_rerank >= 0.68  # tuned threshold
+                # is_relevant = best_rerank >= 0.68  # tuned threshold
 
                 # Save last for RAG
-                self.last_best_distance = best_rerank
+                # self.last_best_distance = best_rerank
 
-                return is_relevant, best_rerank
+                # return is_relevant, best_rerank
+
+            # Weighted combination of faiss and reranker scores
+            alpha = self.reranker_config.get("faiss_weight", 0.6)
+            beta = self.reranker_config.get("rerank_weight", 0.4)
+
+            final_score = alpha * faiss_sim + beta * rerank_sim
+            log.info(
+                "Final score after combining normaloized faiss and rerank score: ",
+                final_score=final_score,
+            )
+
+            # Save for router
+            self.last_best_distance = final_score
+
+            is_relevant = final_score >= 0.55
 
             # If no reranker installed → fallback to FAISS thresholding
-            log.info("Reranked disabled - applying basic faiss thresholding logic")
-            is_relevant = best_faiss <= self.retriever_config.get(
-                "score_threshold", 0.55
-            )
-            self.last_best_distance = best_faiss
-            return is_relevant, best_faiss
+            # log.info("Reranked disabled - applying basic faiss thresholding logic")
+            # is_relevant = best_faiss <= self.retriever_config.get(
+            #     "score_threshold", 0.55
+            # )
+            # self.last_best_distance = best_faiss
+            return is_relevant, final_score
 
         except Exception as e:
             log.error(f"Relevance check failed: {e}")
