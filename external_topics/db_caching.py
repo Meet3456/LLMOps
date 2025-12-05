@@ -4,10 +4,9 @@ import json
 import logging
 import sqlite3
 import time
-from typing import Optional
 
 import redis
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 logging.basicConfig(
@@ -73,7 +72,7 @@ def init_db():
     conn.close()
 
 
-init_db()
+# init_db()
 
 
 class userQuery(BaseModel):
@@ -108,6 +107,7 @@ def get_user(query: userQuery):
         return json.loads(cached_data)
 
     logger.info("Data not found in cache , finding in DB ...")
+
     # if data is not cached , then get the data from the db:
     conn = get_db_connection()
     cursor = conn.cursor()

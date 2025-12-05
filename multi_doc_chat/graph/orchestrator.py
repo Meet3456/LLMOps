@@ -114,7 +114,7 @@ class Orchestrator:
                 w in q_lower for w in ["solve", "calculate", "compute", "evaluate"]
             )
             asks_for_latest = any(
-                kw in q_lower for kw in ["latest", "today", "current", "who won"]
+                kw in q_lower for kw in ["latest", "today", "current", "who won","recently",""]
             )
 
             token_approx = len(q_lower.split())

@@ -18,10 +18,12 @@ groq:
 reranker:
   enabled: true
   model_name: "BAAI/bge-reranker-v2-m3"
-  top_k_routing: 8      # number of docs used in routing quick check
+  top_k_routing: 10      # number of docs used in routing quick check
   top_k_retrieval: 25    # number of docs fetched from FAISS before reranking
   final_k: 6            # final docs sent to RAG LLM 
   torch_dtype: "float32"
+  faiss_weight: 0.5
+  rerank_weight: 0.5
 
 llm:
   # ROUTER: High speed, specific JSON structure

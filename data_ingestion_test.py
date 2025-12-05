@@ -1,7 +1,8 @@
 import asyncio
 from pathlib import Path
-from multi_doc_chat.src.document_ingestion.data_ingestion import DataIngestor
+
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.src.document_ingestion.data_ingestion import DataIngestor
 
 
 class LocalFile:
@@ -21,9 +22,7 @@ async def test_document_ingestion():
 
     # 1. Initialize DataIngestor (creates session dirs)
     ingestor = DataIngestor(
-        temp_base="data",
-        faiss_base="faiss_index",
-        use_session_dirs=True
+        temp_base="data", faiss_base="faiss_index", use_session_dirs=True
     )
 
     print(f"Session ID: {ingestor.session_id}")
@@ -53,8 +52,10 @@ async def test_document_ingestion():
         k=5,
         search_type="mmr",
         fetch_k=35,
-        lambda_mult=0.5
+        lambda_mult=0.5,
     )
+
+    print(f"Retriever type: {type(retriever)}")
 
     print("\n✔ FAISS retriever successfully created.")
     # print(f"Retriever object: {retriever}")
@@ -78,6 +79,7 @@ async def test_document_ingestion():
 
     if meta_file.exists():
         import json
+
         meta = json.loads(meta_file.read_text())
         rows = list(meta.get("rows", {}).keys())
         print(f"Total ingested chunks: {len(rows)}")
