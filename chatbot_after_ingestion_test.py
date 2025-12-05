@@ -21,15 +21,18 @@ def run_end_to_end(index_path: str):
 
         # Define test turns
         conversation_turns = [
-            " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
+            # " All Lamels are Signots with buttons.No yellow Signots have buttons.No Lamels are yellow. If the first two statements are true, the third statement is - true , false , uncertain",
             # "Look at this series: 21, 9, 21, 11, 21, 13, 21, ... What number should come next?"
-            # "what hurts the model quality",
+            # "what hurts the transformer model quality",
             # "Summarize the table , Table 2: The Transformer achieves better BLEU scores",
             # "Details about the Optimizer",
             # "BLEU scores of English-to-French newstest2014 test",
             # "summarise Results are on Section 23 of WSJ"
             # "list all the parsers,there training and resulting score"
-            "who recently scored a century against SA in odi match"
+            # "who recently scored a century against SA in odi match"
+            # "give details about Multi-Head Attention image"
+            # "what was the dropout rate of Transformer model trained for English-to-French",
+            "summarize the Machine Translation section"
         ] 
 
         for i, user_query in enumerate(conversation_turns, start=1):
@@ -65,6 +68,6 @@ def run_end_to_end(index_path: str):
 
 if __name__ == "__main__":
     # Change index path according to your setup
-    DEFAULT_INDEX = "faiss_index/session_18_nov_2025_3:54_pm_5d9f"
+    DEFAULT_INDEX = "faiss_index/session_04_dec_2025_8:04_pm_8a88"
 
     run_end_to_end(DEFAULT_INDEX)  

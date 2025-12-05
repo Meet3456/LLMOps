@@ -62,8 +62,8 @@ async def test_document_ingestion():
     print("\nSTEP 3: Verifying FAISS index files...")
 
     faiss_index_faiss = ingestor.faiss_dir / "index.faiss"
-    faiss_index_pkl   = ingestor.faiss_dir / "index.pkl"
-    meta_file         = ingestor.faiss_dir / "ingested_meta.json"
+    faiss_index_pkl = ingestor.faiss_dir / "index.pkl"
+    meta_file = ingestor.faiss_dir / "ingested_meta.json"
 
     print(f"index.faiss exists? {faiss_index_faiss.exists()}")
     print(f"index.pkl exists?   {faiss_index_pkl.exists()}")
@@ -88,7 +88,6 @@ async def test_document_ingestion():
     print("\n===========================================")
     print("       INGESTION PIPELINE TEST COMPLETE")
     print("===========================================\n")
-
 
 
 if __name__ == "__main__":

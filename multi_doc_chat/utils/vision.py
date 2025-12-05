@@ -12,7 +12,7 @@ client = None
 def get_client():
     global client
     if client is None:
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = os.getenv("GROQ_API_KEY_COMPOUND")
         if not api_key:
             raise ValueError("GROQ_API_KEY environment variable not set.")
         client = AsyncGroq(api_key=api_key)
