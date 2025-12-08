@@ -1,19 +1,22 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import List, Optional, Dict, Any
-from langchain.schema import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from multi_doc_chat.utils.model_loader import ModelLoader
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
-from multi_doc_chat.exception.custom_exception import DocumentPortalException
+
+import hashlib
 import json
+import sys
 import uuid
 from datetime import datetime
-from multi_doc_chat.utils.file_io import save_uploaded_files
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from langchain.schema import Document
+from langchain_community.vectorstores import FAISS
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from multi_doc_chat.exception.custom_exception import DocumentPortalException
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.utils.document_ops import load_documents_and_assets
-import hashlib
-import sys
+from multi_doc_chat.utils.file_io import save_uploaded_files
+from multi_doc_chat.utils.model_loader import ModelLoader
 
 
 # Function to generate a unique session ID:
@@ -218,6 +221,21 @@ class DataIngestor:
             session_id=self.session_id,
         )
 
+        # Step 3a: ensure each chunk has a stable unique ID in metadata
+        for idx, c in enumerate(chunks):
+            md = dict(c.metadata or {})
+            # Only assign if not already present
+            if "id" not in md:
+                md["id"] = f"{self.session_id}__{idx}_{uuid.uuid4().hex[:8]}"
+            c.metadata = md
+
+        log.info(
+            "Assigned stable IDs to chunks",
+            total_chunks=len(chunks),
+            example_id=chunks[0].metadata.get("id") if chunks else None,
+            session_id=self.session_id,
+        )
+
         # Step 4: create/load FAISS manager
         fm = FaissManager(self.faiss_dir, self.model_loader)
 
@@ -337,10 +355,27 @@ class FaissManager:
             new_docs.append(doc)
 
         if new_docs:
-            self.vs.add_documents(new_docs)
-            # log.info("Added new documents to FAISS index", new_count=len(new_docs), total_count=len(self._meta.get("rows",{})))
+            # Ensuring new documents have attached ids:
+            for i, doc in enumerate(new_docs):
+                md = dict(doc.metadata or {})
+
+                if "id" not in md:
+                    md["id"] = (
+                        f"doc_add_{len(self._meta.get('rows', {})) + i}_{uuid.uuid4().hex[:8]}"
+                    )
+
+                doc.metadata = md
+
+            ids = [doc.metadata["id"] for doc in new_docs]
+            self.vs.add_documents(new_docs, ids=ids)
             self.vs.save_local(str(self.index_dir))
             self._save_meta()
+
+            log.info(
+                "Added new documents to FAISS index",
+                new_count=len(new_docs),
+                index_dir=str(self.index_dir),
+            )
 
         return new_docs
 
@@ -362,8 +397,17 @@ class FaissManager:
                 "No existing FAISS index and no data to create one", sys
             )
 
+        # Ensure the id's exist in metadata:
+        metadatas = metadatas or []
+
+        for i, individual_md in enumerate(metadatas):
+            if "id" not in individual_md:
+                individual_md["id"] = f"doc_{i}_{uuid.uuid4().hex[:8]}"
+
+        ids = [individual_md["id"] for individual_md in metadatas]
+
         self.vs = FAISS.from_texts(
-            texts=texts, embedding=self.emb, metadatas=metadatas or []
+            texts=texts, embedding=self.emb, metadatas=metadatas, ids=ids
         )
         self.vs.save_local(str(self.index_dir))
         self._save_meta()

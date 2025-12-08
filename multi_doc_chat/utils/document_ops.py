@@ -245,7 +245,7 @@ async def load_documents_and_assets(
                 print("\n Extracted Image Caption:")
                 print("Source:", doc.metadata.get("source"))
                 print("Page:", doc.metadata.get("page"))
-                print("Caption:", doc.page_content)
+                # print("Caption:", doc.page_content)
 
         return all_docs
 

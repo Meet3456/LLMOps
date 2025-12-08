@@ -11,7 +11,7 @@ router = APIRouter()
 class FastAPIFileAdapter:
     def __init__(self, uf: UploadFile):
         self._uf = uf
-        self.name = uf.filename
+        self.name = uf.filename or "file"
 
     def getbuffer(self):
         self._uf.file.seek(0)

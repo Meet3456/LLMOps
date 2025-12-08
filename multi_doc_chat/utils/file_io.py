@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import re
 import uuid
 from pathlib import Path
-from typing import List, Union, Iterable
-from multi_doc_chat.logger.custom_logger import CustomLogger
+from typing import Iterable, List
+
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
+from multi_doc_chat.logger.custom_logger import CustomLogger
 
 SUPPORTED_EXTENSIONS = {
     ".pdf",

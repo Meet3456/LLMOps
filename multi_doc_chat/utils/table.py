@@ -3,7 +3,6 @@ from typing import List, Dict
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 import camelot
 
-
 def extract_tables_from_pdf(pdf_path: str) -> List[Dict]:
     """
     Extracts tables from a PDF file and returns them as a list of dictionaries.

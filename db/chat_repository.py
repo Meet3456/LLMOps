@@ -9,6 +9,7 @@ class ChatRepository:
         s = Session()
         db.add(s)
         await db.commit()
+        await db.refresh()
         return s.id
 
     async def if_session_exists(self, db: AsyncSession, session_id: str) -> bool:
@@ -27,7 +28,9 @@ class ChatRepository:
 
     async def get_history(self, db: AsyncSession, session_id: str):
         out = db.execute(
-            select(Message).where(Message.id == session_id).order_by(Message.created_at)
+            select(Message)
+            .where(Message.session_id == session_id)
+            .order_by(Message.created_at)
         )
         return out.scalars().all()
 

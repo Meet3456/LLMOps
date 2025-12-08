@@ -4,10 +4,9 @@ from groq import AsyncGroq
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 import asyncio
 import concurrent.futures
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 client = None
-
 
 def get_client():
     global client
@@ -17,7 +16,6 @@ def get_client():
             raise ValueError("GROQ_API_KEY environment variable not set.")
         client = AsyncGroq(api_key=api_key)
     return client
-
 
 # Global semaphore to limit concurrent Groq calls
 semaphore = asyncio.Semaphore(5)

@@ -13,8 +13,8 @@ class RetrieverWrapper:
      - Query relevance detection
      - MMR-based document retrieval (balances relevance + diversity)
      - Configurable search parameters
-
-    MMR (Maximal Marginal Relevance):
+ 
+    MMR (Maximal Marginal Relevance): 
     - Reduces redundancy in retrieved documents
     - lambda_mult controls diversity vs relevance tradeoff
         * 0.0 = maximum diversity (completely different docs)
@@ -202,5 +202,34 @@ class RetrieverWrapper:
             log.error(f"Retrieval failed: {e}")
             return []
 
-    def return_docs_from_ids(self, ids: List[int]):
-        return [self.vectorestore.docstore[_id] for _id in ids]
+    def return_docs_from_ids(self, ids: List[str]) -> List[Document]:
+        """
+        Reconstruct Document objects from stored IDs in FAISS docstore.
+
+        Assumes docstore keys == metadata['id'], enforced in FaissManager.
+        """
+        docs: List[Document] = []
+        store = self.vectorestore.docstore
+
+        for _id in ids:
+            try:
+                doc = store[_id]  # docstore key is our "id"
+                if doc:
+                    docs.append(doc)
+            except KeyError:
+                log.warning("Doc ID not found in FAISS docstore", doc_id=_id)
+            except Exception as e:
+                log.warning("Failed to load doc from id", doc_id=_id, error=str(e))
+
+        log.info("docs_from_ids result", num_docs=len(docs))
+        return docs
+
+    def embed_query(self , query:str)->List[float]:
+        try:
+            embd_func = getattr(self.vectorestore , "embedding_function" , None)
+            if embd_func is None:
+                raise ValueError("Vectorstore has no embedding_function")
+            return embd_func.embed_query(query)
+        except Exception as e:
+            log.error(f"Failed to embed query: {e}")
+            raise
