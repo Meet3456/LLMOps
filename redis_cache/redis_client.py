@@ -1,7 +1,7 @@
 import os
 import json
 import redis
-from utils.hashing_for_redis import hash_str
+from multi_doc_chat.utils.hashing_for_redis import hash_str
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")

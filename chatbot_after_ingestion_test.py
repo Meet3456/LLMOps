@@ -1,7 +1,6 @@
 import traceback
 
 from multi_doc_chat.graph.orchestrator import Orchestrator
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 
 def print_block(title, content):
@@ -45,13 +44,13 @@ def run_end_to_end(index_path: str):
             # "who recently scored a century against SA in odi match"
             # "give details about Multi-Head Attention image"
             # "what was the dropout rate of Transformer model trained for English-to-French",
-            "summarize the Machine Translation section"
+            # "summarize the Machine Translation section",
             # "list all the parsers,there training and resulting score",
             # "who recently scored a century against SA in odi match",
             # "detail summary of machine translation section",
             # "scorecard or recent ind vs sa odi match"
-            "no of players who scored century in recent ind vs sa match"
-        ] 
+            "result of recent nz vs wi test match"
+        ]
 
         for i, user_query in enumerate(conversation_turns, start=1):
             print_block(f"🧠 TURN {i}: USER QUERY", user_query)
@@ -86,6 +85,6 @@ def run_end_to_end(index_path: str):
 
 if __name__ == "__main__":
     # Change index path according to your setup
-    DEFAULT_INDEX = "faiss_index/session_04_dec_2025_8:04_pm_8a88"
+    DEFAULT_INDEX = "faiss_index/session_05_dec_2025_11:18_am_d65d"
 
     run_end_to_end(DEFAULT_INDEX)

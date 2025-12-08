@@ -1,14 +1,15 @@
 import os
 import sys
-import json
-from dotenv import load_dotenv
-from multi_doc_chat.utils.config_loader import load_config
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
-from multi_doc_chat.exception.custom_exception import DocumentPortalException
-from sentence_transformers import CrossEncoder
+
 import torch
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_groq import ChatGroq
+from sentence_transformers import CrossEncoder
+
+from multi_doc_chat.exception.custom_exception import DocumentPortalException
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.utils.config_loader import load_config
 
 
 class ApiKeyManager:
@@ -57,6 +58,7 @@ class ModelLoader:
 
         self.reranker = self._load_reranker()
 
+    # Loads reranker overall once into system:
     def _load_reranker(self):
         """Load reranker only if enabled."""
         rerank_cfg = self.config.get("reranker", {})
@@ -80,6 +82,7 @@ class ModelLoader:
         log.info("Reranker loaded successfully")
         return model
 
+    # will not download the model again and again instead gets it from the system:
     def get_reranker(self):
         """Return the loaded reranker (or None)."""
         return self.reranker

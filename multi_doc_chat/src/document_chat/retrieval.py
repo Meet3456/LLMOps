@@ -130,7 +130,7 @@ class RetrieverWrapper:
             # Save for router
             self.last_best_distance = final_score
 
-            is_relevant = final_score >= 0.55
+            is_relevant = final_score >= 0.56
 
             # If no reranker installed → fallback to FAISS thresholding
             # log.info("Reranked disabled - applying basic faiss thresholding logic")
@@ -201,3 +201,6 @@ class RetrieverWrapper:
         except Exception as e:
             log.error(f"Retrieval failed: {e}")
             return []
+
+    def return_docs_from_ids(self, ids: List[int]):
+        return [self.vectorestore.docstore[_id] for _id in ids]

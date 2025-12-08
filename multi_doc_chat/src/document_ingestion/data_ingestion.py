@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Iterable, List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 from langchain.schema import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -14,7 +14,6 @@ from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.document_ops import load_documents_and_assets
 import hashlib
 import sys
-import asyncio
 
 
 # Function to generate a unique session ID:
@@ -242,6 +241,7 @@ class DataIngestor:
 
         # Step 5: add documents idempotently
         added = fm.add_documents(chunks)
+        log.info("Added documnets to faiss",added = added)
 
         # Step 6: return retriever configured with search kwargs
         search_kwargs = {"k": k}
