@@ -19,7 +19,7 @@ from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.model_loader import ModelLoader
 
 
-# Function to generate a unique session ID:
+# Function to generate a unique session ID: 
 def generate_session_id() -> str:
     """Generate a unique session ID with timestamp."""
     now = datetime.now()

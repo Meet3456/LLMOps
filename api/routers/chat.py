@@ -48,7 +48,8 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
     else:
         docs = await run_sync(orchestrator.retriever.retrieve, query)
 
-        ids = [d.metadata["doc_id"] for d in docs]
+        ids = [d.metadata["id"] for d in docs if "id" in d.metadata]
+
         log.info("List of retrieved doc ids : ", ids=ids)
 
         cache_retrieval(req.session_id, query, ids)

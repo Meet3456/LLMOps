@@ -1,7 +1,10 @@
-import pandas as pd
-from typing import List, Dict
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from typing import Dict, List
+
 import camelot
+import pandas as pd
+
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
+
 
 def extract_tables_from_pdf(pdf_path: str) -> List[Dict]:
     """
@@ -12,7 +15,7 @@ def extract_tables_from_pdf(pdf_path: str) -> List[Dict]:
 
     try:
         cat = camelot.read_pdf(pdf_path, pages="all", flavor="lattice")
-        log.info(f"Found {len(cat)} tables in {pdf_path}")
+        log.info("PDF tables detected", file=pdf_path, count=len(cat))
 
         for i, table in enumerate(cat):
             df: pd.DataFrame = table.df
@@ -34,7 +37,12 @@ def extract_tables_from_pdf(pdf_path: str) -> List[Dict]:
 def extract_tables_from_csv(csv_path: str) -> List[Dict]:
     try:
         df = pd.read_csv(csv_path)
-        return [{"csv": df.to_csv(index=False), "json": df.to_dict(orient="records")}]
+        return [
+            {
+                "csv": df.to_csv(index=False), 
+                "json": df.to_dict(orient="records")
+            }
+        ]
     except Exception as e:
         log.warning("CSV read failed", file=csv_path, error=str(e))
         return []

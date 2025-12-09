@@ -1,14 +1,17 @@
-import base64
-import os
-from groq import AsyncGroq
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
 import asyncio
+import base64
 import concurrent.futures
-from typing import Dict, Any
+import os
+from typing import Any, Dict, List
+
+from groq import AsyncGroq
+
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 client = None
 
-def get_client():
+
+def get_client(): 
     global client
     if client is None:
         api_key = os.getenv("GROQ_API_KEY_COMPOUND")
@@ -17,11 +20,14 @@ def get_client():
         client = AsyncGroq(api_key=api_key)
     return client
 
+
+MAX_GROQ_CONCURRENCY = int(os.getenv("MAX_GROQ_CONCURRENCY", 12))
+
 # Global semaphore to limit concurrent Groq calls
-semaphore = asyncio.Semaphore(5)
+semaphore = asyncio.Semaphore(MAX_GROQ_CONCURRENCY)
 
 # shared thread pool exector
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
 
 
 async def _read_file_b64(path: str) -> str:
@@ -31,7 +37,8 @@ async def _read_file_b64(path: str) -> str:
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
 
-    return await asyncio.get_running_loop().run_in_executor(executor, _read)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, _read)
 
 
 async def encode_image_b64(path: str) -> str:
@@ -40,32 +47,43 @@ async def encode_image_b64(path: str) -> str:
 
 
 async def _caption_request(
-    b64: str,
+    b64_List: List[str],
     prompt: str,
-    timeout: int,
     model: str,
     max_tokens: int,
     top_p: float,
     temperature: float,
-):
+) -> List[str]:
     client = get_client()
 
-    message = [
-        {"type": "text", "text": prompt},
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-    ]
+    async def _process_single_image(b64: str) -> str:
+        message = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            },
+        ]
 
-    async with semaphore:
-        completion = await client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": message}],
-            max_tokens=max_tokens,
-            top_p=top_p,
-            temperature=temperature,
-            response_format={"type": "text"},
-        )
+        async with semaphore:
+            completion = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": message}],
+                max_tokens=max_tokens,
+                top_p=top_p,
+                temperature=temperature,
+                response_format={"type": "text"},
+            )
 
-        return completion
+        msg = completion.choices[0].message
+
+        if isinstance(msg.content, str):
+            return msg.content
+        return str(msg.content)
+
+    tasks = [_process_single_image(single_b64) for single_b64 in b64_List]
+
+    return await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def caption_image_from_bytes(
@@ -82,24 +100,24 @@ async def caption_image_from_bytes(
 
     for attempt in range(1, retries + 1):
         try:
-            log.debug(f"Captioning image from bytes, attempt {attempt}/{retries}")
-
-            response = await asyncio.wait_for(
-                _caption_request(
-                    base_64, prompt, timeout, model, max_tokens, top_p, temperature
-                ),
-                timeout=timeout + 5,
+            log.debug(
+                "Captioning image from bytes",
+                attempt=attempt,
+                retries=retries,
             )
 
-            message = response.choices[0].message
-
-            caption_text = (
-                message.content
-                if isinstance(message.content, str)
-                else str(message.content)
+            captions = await _caption_request(
+                [base_64],
+                prompt=prompt,
+                model=model,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                temperature=temperature,
             )
-            log.debug(f"Captioning successful: {caption_text}")
-            return {"caption": caption_text, "raw_message": message}
+
+            caption_text = captions[0] if captions else ""
+            log.debug("Captioning successful", caption=caption_text)
+            return {"caption": caption_text}
         except asyncio.TimeoutError:
             log.warning("Groq caption timeout", attempt=attempt)
         except Exception as e:
@@ -113,12 +131,25 @@ async def caption_image(
     prompt: str = "Describe the image in a concise caption. Include objects, scene, and any notable attributes.",
     **kwargs,
 ) -> Dict[str, Any]:
-    """Async captioning from an image file path using executor for file read."""
+    """
+    Async captioning from an image file path.
+    Reads the file bytes in a thread pool, then calls caption_image_from_bytes.
+    """
     try:
-        b64 = await _read_file_b64(image_path)
-        return await caption_image_from_bytes(
-            base64.b64decode(b64), prompt=prompt, **kwargs
-        )
+        loop = asyncio.get_running_loop()
+
+        def _read_bytes():
+            with open(image_path, "rb") as f:
+                return f.read()
+
+        image_bytes = await loop.run_in_executor(executor, _read_bytes)
+
+        return await caption_image_from_bytes(image_bytes, prompt=prompt, **kwargs)
+
     except Exception as e:
-        log.error("Image captioning failed", error=str(e), path=image_path)
+        log.error(
+            "Image captioning failed",
+            error=str(e),
+            path=image_path,
+        )
         return {"caption": "", "error": str(e)}

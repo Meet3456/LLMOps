@@ -1,28 +1,26 @@
 from __future__ import annotations
+
 import asyncio
+import concurrent.futures
+import json
 from pathlib import Path
 from typing import Iterable, List
 
-from langchain_core.documents import Document
-
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
-from multi_doc_chat.logger import GLOBAL_LOGGER as log
-from multi_doc_chat.exception.custom_exception import DocumentPortalException
-from fastapi import UploadFile
-
-from multi_doc_chat.utils.vision import caption_image, caption_image_from_bytes
-from multi_doc_chat.utils.table import (
-    extract_tables_from_pdf,
-    extract_tables_from_csv,
-    html_tables_to_json,
-)
-
 import fitz
 from bs4 import BeautifulSoup
-import concurrent.futures
-import json
+from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, TextLoader
+from langchain_core.documents import Document
 
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+from multi_doc_chat.exception.custom_exception import DocumentPortalException
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.utils.table import (
+    extract_tables_from_csv,
+    extract_tables_from_pdf,
+    html_tables_to_json,
+)
+from multi_doc_chat.utils.vision import caption_image, caption_image_from_bytes
+
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
 
 
 async def _process_single_path(
@@ -34,10 +32,12 @@ async def _process_single_path(
     """
     docs: List[Document] = []
     extension = p.suffix.lower()
+    loop = asyncio.get_running_loop()
+    
     try:
         if extension == ".pdf":
             loader = PyPDFLoader(str(p))
-            text_docs = await asyncio.get_running_loop().run_in_executor(
+            text_docs = await loop.run_in_executor(
                 executor, loader.load
             )
 
@@ -48,7 +48,7 @@ async def _process_single_path(
             docs.extend(text_docs)
 
             # extract tables via camelot in executor
-            tables = await asyncio.get_running_loop().run_in_executor(
+            tables = await loop.run_in_executor(
                 executor, extract_tables_from_pdf, str(p)
             )
 
