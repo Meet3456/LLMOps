@@ -13,8 +13,8 @@ class RetrieverWrapper:
      - Query relevance detection
      - MMR-based document retrieval (balances relevance + diversity)
      - Configurable search parameters
- 
-    MMR (Maximal Marginal Relevance): 
+
+    MMR (Maximal Marginal Relevance):
     - Reduces redundancy in retrieved documents
     - lambda_mult controls diversity vs relevance tradeoff
         * 0.0 = maximum diversity (completely different docs)
@@ -25,12 +25,13 @@ class RetrieverWrapper:
     def __init__(
         self, vectorestore, model_loader: ModelLoader, retriever_config, reranker_config
     ):
+        # passed via orchestrator during initialization of Retriever
         self.vectorestore = vectorestore
         self.model_loader = model_loader
         self.retriever_config = retriever_config or {}
         self.reranker_config = reranker_config or {}
 
-        # Loaded once in ModelLoader.__init__
+        # Loaded once in ModelLoader.__init__ and get the reranker model
         self.reranker = model_loader.get_reranker()
 
         # Last best distance from quick doc-check
@@ -51,7 +52,7 @@ class RetrieverWrapper:
         Args:
             query: User's query string
         Returns:
-            Tuple of (is_query_relevant_to_document: bool, relevance_score: Optional[float] or none)
+            Tuple of (is_query_relevant_to_document: bool, relevance_score: float or none)
         """
         try:
             top_k_for_check = self.reranker_config.get("top_k_routing", 10)
@@ -108,14 +109,6 @@ class RetrieverWrapper:
                 log.info(
                     "Rerankers normalized similarit score : ", rerank_sim=rerank_sim
                 )
-
-                # FINAL relevance decision (reranker dominates FAISS)
-                # is_relevant = best_rerank >= 0.68  # tuned threshold
-
-                # Save last for RAG
-                # self.last_best_distance = best_rerank
-
-                # return is_relevant, best_rerank
 
             # Weighted combination of faiss and reranker scores
             alpha = self.reranker_config.get("faiss_weight", 0.6)
@@ -206,14 +199,19 @@ class RetrieverWrapper:
         """
         Reconstruct Document objects from stored IDs in FAISS docstore.
 
-        Assumes docstore keys == metadata['id'], enforced in FaissManager.
+        Assumes:
+        - During data ingestion , metadata["id"] was assigned to each doc
+        - FAISS was built with ids = metadata["id"] , so docstore keys match
         """
         docs: List[Document] = []
         store = self.vectorestore.docstore
 
+        # Iterate over each doc-id from the ids list
         for _id in ids:
             try:
-                doc = store[_id]  # docstore key is our "id"
+                # get the doc respective to id from the docstore
+                doc = store[_id] 
+                # if a doc is found append it to list of "docs" 
                 if doc:
                     docs.append(doc)
             except KeyError:
@@ -224,11 +222,18 @@ class RetrieverWrapper:
         log.info("docs_from_ids result", num_docs=len(docs))
         return docs
 
-    def embed_query(self , query:str)->List[float]:
+    def embed_query(self, query: str) -> List[float]:
+        """
+        Using the same embedding function FAISS was built with to embed a query.
+        This is used for:
+          - Semantic retrieval
+          - Semantic retrieval-cache matching
+        """
         try:
-            embd_func = getattr(self.vectorestore , "embedding_function" , None)
+            embd_func = getattr(self.vectorestore, "embedding_function", None)
             if embd_func is None:
                 raise ValueError("Vectorstore has no embedding_function")
+            # return the embedded query:
             return embd_func.embed_query(query)
         except Exception as e:
             log.error(f"Failed to embed query: {e}")

@@ -75,6 +75,7 @@ class DataIngestor:
 
             # New: artifact directory for saving extracted images/tables
             self.artifacts_base = Path("artifacts")
+            # creates a session-wise artifacts folder based on session id(industry standard convention)
             self.artifacts_dir = self._resolve_dir(self.artifacts_base)
 
             # Subdirectories for images and tables
@@ -135,6 +136,7 @@ class DataIngestor:
         out_chunks: List[Document] = []
 
         for doc in docs:
+            # get the modality of each doc as saved wrt to the convention inside {load_documents_and_assets} Function
             modality = doc.metadata.get("modality", "text")
 
             if modality == "image":
@@ -192,12 +194,12 @@ class DataIngestor:
         # Step 1: persist files to temp dir (save_uploaded_files returns Path list)
         paths = save_uploaded_files(paths, self.temp_dir)
         log.info(
-            "Files saved to temp dir",
+            "Files saved to temp dir for the given session",
             saved=[str(p) for p in paths],
             session_id=self.session_id,
         )
 
-        # Step 2: async load docs & assets (text, tables, images/captions)
+        # Step 2: async load docs & assets (text, tables, images/captions) from the list of paths
         docs = await load_documents_and_assets(
             paths, images_dir=self.images_dir, tables_dir=self.tables_dir
         )
@@ -292,8 +294,11 @@ class FaissManager:
         self.index_dir.mkdir(parents=True, exist_ok=True)
 
         self.meta_path = self.index_dir / "ingested_meta.json"
+
+        # metadata of the docs
         self._meta: Dict[str, Any] = {"rows": {}}
 
+        # if the metadta already exist s in the respective metadata_path then load it into {_meta} variable
         if self.meta_path.exists():
             try:
                 self._meta = json.loads(self.meta_path.read_text(encoding="utf-8")) or {
@@ -304,6 +309,7 @@ class FaissManager:
                     index_dir=str(self.index_dir),
                     entries=len(self._meta.get("rows", {})),
                 )
+            # If it does not exists then initialize it as a wmpty dictionary with key - "rows"
             except Exception as e:
                 self._meta = {"rows": {}}
                 log.error(
@@ -350,11 +356,12 @@ class FaissManager:
 
         new_docs: List[Document] = []
 
+        # check if some doc already exists in the FAISS Index via fingerprint created for each chunk/docs
         for doc in docs:
-            # Create a fingerprint key for the doc
+            # Create a fingerprint key for the doc with help of page content and some metadata
             key = self._fingerprint(doc.page_content, doc.metadata or {})
 
-            # if the key already exists in the meat data rows - Then skip it and continue
+            # if the key already exists in the meta-data rows - Then skip it and continue
             if key in self._meta.get("rows", {}):
                 log.debug("Skipping already-ingested document", fingerprint=key)
                 continue
@@ -377,12 +384,16 @@ class FaissManager:
                     md["id"] = (
                         f"doc_add_{len(self._meta.get('rows', {})) + i}_{uuid.uuid4().hex[:8]}"
                     )
-
+                # update the meta-data for the respective doc
                 doc.metadata = md
 
+            # get the ids for all the new_docs that needs to be added in the Faiss vectore-store
             ids = [doc.metadata["id"] for doc in new_docs]
+            # add the documents
             self.vs.add_documents(new_docs, ids=ids)
+            # save the updated Faiss index
             self.vs.save_local(str(self.index_dir))
+            # save the updated meta-data
             self._save_meta()
 
             log.info(
@@ -428,5 +439,6 @@ class FaissManager:
             texts=texts, embedding=self.emb, metadatas=metadatas, ids=ids
         )
         self.vs.save_local(str(self.index_dir))
+        # a helper function to save the _meta at the meta_path:
         self._save_meta()
         return self.vs

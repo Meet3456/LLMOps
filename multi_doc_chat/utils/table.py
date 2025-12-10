@@ -12,15 +12,20 @@ def extract_tables_from_pdf(pdf_path: str) -> List[Dict]:
     Each dictionary contains the table data in a structured format.
     """
     tables = []
-
+    log.info("Extracting table for the following doc path : ",path=pdf_path)
     try:
         cat = camelot.read_pdf(pdf_path, pages="all", flavor="lattice")
         log.info("PDF tables detected", file=pdf_path, count=len(cat))
 
         for i, table in enumerate(cat):
+            # convert the table into df:
             df: pd.DataFrame = table.df
+
+            # xreate a csv and json based table content
             csv_text = df.to_csv(index=False)
             json_data = df.to_dict(orient="records")
+ 
+            # append it to the list of tables
             tables.append(
                 {
                     "table_index": i,

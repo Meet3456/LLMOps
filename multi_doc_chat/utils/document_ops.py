@@ -36,29 +36,32 @@ async def _process_single_path(
     
     try:
         if extension == ".pdf":
+
+            # Basic Text Docs Processing for pdf:
+
             loader = PyPDFLoader(str(p))
             text_docs = await loop.run_in_executor(
                 executor, loader.load
             )
-
-            # mark the metadata
+            # mark the metadata (modality and the source from where the doc is extracted)
             for doc in text_docs:
                 doc.metadata = dict(doc.metadata or {})
                 doc.metadata.update({"modality": "text", "source": str(p)})
             docs.extend(text_docs)
 
-            # extract tables via camelot in executor
+            # Basic Table Processing for pdf:
+
             tables = await loop.run_in_executor(
                 executor, extract_tables_from_pdf, str(p)
             )
 
             for idx, t in enumerate(tables):
-                # Save CSV
+                # create a csv path and the csv_text content from each table to it
                 csv_path = tables_dir / f"{p.stem}_page{t['page']}_table{idx}.csv"
                 with open(csv_path, "w", encoding="utf-8") as f:
                     f.write(t["csv"])
 
-                # Save JSON
+                 # create a json path and the json content from each table to it
                 json_path = tables_dir / f"{p.stem}_page{t['page']}_table{idx}.json"
                 with open(json_path, "w", encoding="utf-8") as f:
                     json.dump(t["json"], f, indent=2)
@@ -68,6 +71,7 @@ async def _process_single_path(
                     f"Preview:\n" + "\n".join(t["csv"].splitlines()[:10])
                 )
 
+                # appending all the tables to the docs as a Document object of Lnagchain with page content and metadata
                 docs.append(
                     Document(
                         page_content=table_text,
@@ -81,12 +85,16 @@ async def _process_single_path(
                     )
                 )
 
-            # extract images using pymupdf and caption them concurrently from bytes
+            # Image processing for pdf : extract images using pymupdf and caption them concurrently from bytes
+
             pdf = fitz.open(str(p))
             caption_tasks = []
             image_meta = []
             for i in range(len(pdf)):
+                # processing individual page   
                 page = pdf[i]
+
+                # using 
                 image_list = page.get_images(full=True)
                 for img_index, img_meta in enumerate(image_list):
                     try:
@@ -120,6 +128,8 @@ async def _process_single_path(
 
             if caption_tasks:
                 captions = await asyncio.gather(*caption_tasks)
+
+                # Iterate over the generated List of captions for all images and the respective metadata
                 for cap_result, meta in zip(captions, image_meta):
                     if cap_result.get("caption"):
                         docs.append(
@@ -241,6 +251,7 @@ async def load_documents_and_assets(
         log.info("Documents & assets loaded", count=len(all_docs))
 
         for doc in all_docs:
+            # just for debugging purpose
             if doc.metadata.get("modality") == "image":
                 print("\n Extracted Image Caption:")
                 print("Source:", doc.metadata.get("source"))
