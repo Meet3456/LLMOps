@@ -19,7 +19,7 @@ from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.model_loader import ModelLoader
 
 
-# Function to generate a unique session ID: 
+# Function to generate a unique session ID:
 def generate_session_id() -> str:
     """Generate a unique session ID with timestamp."""
     now = datetime.now()
@@ -77,7 +77,7 @@ class DataIngestor:
             self.artifacts_base = Path("artifacts")
             self.artifacts_dir = self._resolve_dir(self.artifacts_base)
 
-            # Subdirectories
+            # Subdirectories for images and tables
             self.images_dir = self.artifacts_dir / "images"
             self.tables_dir = self.artifacts_dir / "tables"
 
@@ -188,6 +188,7 @@ class DataIngestor:
             count=len(list(paths)),
             session_id=self.session_id,
         )
+
         # Step 1: persist files to temp dir (save_uploaded_files returns Path list)
         paths = save_uploaded_files(paths, self.temp_dir)
         log.info(
@@ -215,6 +216,7 @@ class DataIngestor:
             chunk_size_table=600,
             chunk_overlap_table=50,
         )
+
         log.info(
             "Total chunks after splitting",
             chunks=len(chunks),
@@ -222,12 +224,12 @@ class DataIngestor:
         )
 
         # Step 3a: ensure each chunk has a stable unique ID in metadata
-        for idx, c in enumerate(chunks):
-            md = dict(c.metadata or {})
+        for idx, individual_c in enumerate(chunks):
+            md = dict(individual_c.metadata or {})
             # Only assign if not already present
             if "id" not in md:
                 md["id"] = f"{self.session_id}__{idx}_{uuid.uuid4().hex[:8]}"
-            c.metadata = md
+            individual_c.metadata = md
 
         log.info(
             "Assigned stable IDs to chunks",
@@ -239,9 +241,11 @@ class DataIngestor:
         # Step 4: create/load FAISS manager
         fm = FaissManager(self.faiss_dir, self.model_loader)
 
+        # Extracting and separating all the texts and metadat from chunks
         texts = [c.page_content for c in chunks]
         metadatas = [dict(c.metadata or {}) for c in chunks]
 
+        # load or create faiss index from the text and metadta
         try:
             vs = fm.load_or_create_index(texts=texts, metadatas=metadatas)
             log.info(
@@ -259,7 +263,7 @@ class DataIngestor:
 
         # Step 5: add documents idempotently
         added = fm.add_documents(chunks)
-        log.info("Added documnets to faiss",added = added)
+        log.info("Added documnets to faiss", added=added)
 
         # Step 6: return retriever configured with search kwargs
         search_kwargs = {"k": k}
@@ -322,6 +326,9 @@ class FaissManager:
 
     @staticmethod
     def _fingerprint(text: str, md: Dict[str, Any]) -> str:
+        """
+        Create a fingerprint hash for (text, source) pair to detect duplicates.
+        """
         h = hashlib.sha256(text.encode("utf-8")).hexdigest()
         src = md.get("source", "unknown")
         return f"{src}::{h}"
@@ -332,6 +339,10 @@ class FaissManager:
         )
 
     def add_documents(self, docs: List[Document]):
+        """
+        Add new non-duplicate documents to FAISS.
+        Duplicate detection is based on _fingerprint(text, metadata).
+        """
         if self.vs is None:
             raise ValueError(
                 "FAISS vectorstore not loaded. Call load_or_create_index() first."
@@ -340,12 +351,15 @@ class FaissManager:
         new_docs: List[Document] = []
 
         for doc in docs:
+            # Create a fingerprint key for the doc
             key = self._fingerprint(doc.page_content, doc.metadata or {})
+
+            # if the key already exists in the meat data rows - Then skip it and continue
             if key in self._meta.get("rows", {}):
                 log.debug("Skipping already-ingested document", fingerprint=key)
                 continue
 
-            # store minimal data and diagnostics in metadata
+            # else store minimal data and diagnostics in metadata
             self._meta["rows"][key] = {
                 "source": doc.metadata.get("source"),
                 "modality": doc.metadata.get("modality"),
@@ -382,6 +396,10 @@ class FaissManager:
     def load_or_create_index(
         self, texts: Optional[List[str]], metadatas: Optional[list[dict]]
     ):
+        """
+        Load existing FAISS index if present; otherwise create a new one using given texts.
+        Ensures docstore keys = metadata['id'].
+        """
         if self._exists():
             log.info("Loading existing FAISS index", index_dir=str(self.index_dir))
 

@@ -1,5 +1,7 @@
+from typing import List
+
 from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from multi_doc_chat.src.document_ingestion.data_ingestion import generate_session_id
 
@@ -26,12 +28,44 @@ class Session(Base):
     created_at: Mapped[str] = mapped_column(
         TIMESTAMP, server_default=func.now(), nullable=False
     )
+    messages: Mapped[List["Message"]] = relationship(
+        "Message",
+        # Back_populates makes it a two-way connection. Between session and messages
+        back_populates="session",
+        # If a Session is deleted → all Messages linked to it are automatically deleted.
+        # No orphan messages exist with no session_id.
+        cascade="all, delete-orphan",
+    )
 
 
 class Message(Base):
     __tablename__ = "messages"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(String, ForeignKey("sessions.id"))
+    session_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(TIMESTAMP, server_default=func.now())
+
+    # Every Message gets a .session property pointing back to its owning session.
+    session: Mapped[Session] = relationship("Session",back_populates="messages")
+
+"""
+session = await db.get(Session, session_id)
+session.messages  # <-- automatically populated by relationship
+
+Your endpoint:
+
+history = await repo.get_history(db, session_id)
+
+
+works fine, but with relationships you can also:
+
+session = (await db.get(Session, session_id))
+for msg in session.messages:
+    print(msg.role, msg.content)
+"""
