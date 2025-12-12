@@ -1,8 +1,9 @@
 import json
 import traceback
-from typing import List
+from typing import List, Optional
 
 from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
@@ -164,7 +165,12 @@ class Orchestrator:
             return "reasoning"
 
     # Function which runs the rag pipeline(if rourted to rag node):
-    def run_rag(self, query: str, chat_history: List):
+    def run_rag(
+        self,
+        query: str,
+        chat_history: List,
+        docs: Optional[List[Document]] = None,
+    ):
         try:
             # Initialize the rag llm:
             llm = self.rag_llm
@@ -185,19 +191,22 @@ class Orchestrator:
                 log.info("no chat_history passing default user input query")
                 rewritten_query = query
             """
-            # Retrieve relevant docs with mmr search from the faiss index
-            docs = self.retriever.retrieve(query)
+
+            # If docs are not supplied → do normal retrieval
+            if docs is None:
+                # Retrieve relevant docs with mmr search from the faiss index
+                docs = self.retriever.retrieve(query)
 
             len_docs = len(docs)
-            log.info("Lenght of retrieved docs from vectorestore", docs=len_docs)
+            log.info("Length of retrieved docs for RAG", docs=len_docs)
 
-            if not docs:
+            if not docs or len(docs)==0:
                 log.info("RAG: no documents retrieved")
                 return (
                     "I don't know based on the available documents. "
                     "I could not find any relevant content in the knowledge base."
                 )
-
+            
             # Fetch the content from docs and builf the context:
             context = "\n\n".join(getattr(d, "page_content", str(d)) for d in docs)
 

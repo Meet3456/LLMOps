@@ -115,14 +115,14 @@ def store_retrieved_result_entry(
         # store the hash query key by mapping it to respective session using (_session_query_entry_key)
         entry_key = _session_query_entry_key(session_id, q_hash)
 
-        # create a var for storing the input query , its corrresponding embedding and the retrieved docs
+        # create a var for storing the input query , its corresponding embedding and the retrieved docs
         entry = {
             "norm_query": norm_query,
             "embedding": embedding,
             "doc_ids": doc_ids,
         }
 
-        # store the entry into redis
+        # store the entry into redis 
         redis_client.setex(entry_key, ttl, json.dumps(entry))
 
         # create a session index set:
@@ -161,6 +161,7 @@ def lookup_retrieval_entry(
         exact_key = _session_query_entry_key(session_id, q_hash)
 
         # Case:1 Exact match - if user asks the similar question(exact wordings) again
+        
         cached_docs = redis_client.get(exact_key)
         if cached_docs:
             log.debug("Retrieval cache HIT (exact)", session_id=session_id)
@@ -184,7 +185,25 @@ def lookup_retrieval_entry(
             raw_entry = redis_client.get(query_key)
             if not raw_entry:
                 continue
+            entry = json.loads(raw_entry)
+            embd = entry.get("embedding",[])
+            similarity = cosine_sim(query_embedding,embd)
+            if similarity > best_sim:
+                best_sim = similarity
+                best_entry = entry
 
+        if best_entry and best_sim >= semantic_threshold:
+            log.debug(
+                "Retrieval cache HIT (semantic)",
+                session_id=session_id,
+                sim=best_sim,
+            )
+            return best_entry
+
+        log.debug(
+            "Retrieval cache MISS (semantic)", session_id=session_id, best_sim=best_sim
+        )
+        return None
 
     except Exception as e:
         pass
