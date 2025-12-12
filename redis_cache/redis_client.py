@@ -17,8 +17,8 @@ redis_client = redis.Redis(
     port=REDIS_PORT,
     db=REDIS_DB,
     decode_responses=True,
-    socket_timeout=0.2,
-    socket_connect_timeout=0.2,
+    socket_timeout=2.0,
+    socket_connect_timeout=2.0,
 )
 
 
@@ -122,7 +122,7 @@ def store_retrieved_result_entry(
             "doc_ids": doc_ids,
         }
 
-        # store the entry into redis 
+        # store the entry into redis
         redis_client.setex(entry_key, ttl, json.dumps(entry))
 
         # create a session index set:
@@ -161,7 +161,7 @@ def lookup_retrieval_entry(
         exact_key = _session_query_entry_key(session_id, q_hash)
 
         # Case:1 Exact match - if user asks the similar question(exact wordings) again
-        
+
         cached_docs = redis_client.get(exact_key)
         if cached_docs:
             log.debug("Retrieval cache HIT (exact)", session_id=session_id)
@@ -174,20 +174,23 @@ def lookup_retrieval_entry(
         prev_hashed_query_keys = redis_client.smembers(idx_key)
 
         if not prev_hashed_query_keys:
-            log.debug("Retrieval cache MISS (no index for the respective session)", session_id=session_id)
+            log.debug(
+                "Retrieval cache MISS (no index for the respective session)",
+                session_id=session_id,
+            )
             return None
 
         best_entry = None
         best_sim = -1.0
 
         for hash in prev_hashed_query_keys:
-            query_key = _session_query_entry_key(session_id,hash)
+            query_key = _session_query_entry_key(session_id, hash)
             raw_entry = redis_client.get(query_key)
             if not raw_entry:
                 continue
             entry = json.loads(raw_entry)
-            embd = entry.get("embedding",[])
-            similarity = cosine_sim(query_embedding,embd)
+            embd = entry.get("embedding", [])
+            similarity = cosine_sim(query_embedding, embd)
             if similarity > best_sim:
                 best_sim = similarity
                 best_entry = entry
@@ -206,4 +209,5 @@ def lookup_retrieval_entry(
         return None
 
     except Exception as e:
-        pass
+        log.warning("Failed to lookup retrieval entry", error=str(e))
+        return None

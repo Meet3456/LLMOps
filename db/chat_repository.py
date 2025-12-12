@@ -15,7 +15,7 @@ class ChatRepository:
         s = Session()
         db.add(s)
         await db.commit()
-        await db.refresh()
+        await db.refresh(s)
         log.info("New session created", session_id=s.id)
         return s.id
 

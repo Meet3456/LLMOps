@@ -4,7 +4,6 @@ from db.chat_repository import ChatRepository
 from db.database import get_db
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.src.document_ingestion.data_ingestion import DataIngestor
-from multi_doc_chat.utils.thread_pool import run_sync
 
 router = APIRouter()
 

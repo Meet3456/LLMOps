@@ -4,7 +4,7 @@ from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from multi_doc_chat.src.document_ingestion.data_ingestion import generate_session_id
-
+from datetime import datetime
 
 class Base(DeclarativeBase):
     pass
@@ -23,9 +23,9 @@ class Session(Base):
 
     __tablename__ = "sessions"
     id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: generate_session_id
+        String, primary_key=True, default=lambda: generate_session_id()
     )
-    created_at: Mapped[str] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, server_default=func.now(), nullable=False
     )
     messages: Mapped[List["Message"]] = relationship(
@@ -49,7 +49,7 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(TIMESTAMP, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
     # Every Message gets a .session property pointing back to its owning session.
     session: Mapped[Session] = relationship("Session",back_populates="messages")
