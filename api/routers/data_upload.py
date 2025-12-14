@@ -49,7 +49,7 @@ async def uploadFiles(files: list[UploadFile] = File(...), db=Depends(get_db)):
 
     # Run ingestion in threadpool (blocking work off main event loop)
     await ingestor.built_retriever(
-        uploaded_files=wrapped,
+        wrapped,
         chunk_size=1000,
         chunk_overlap=200,
         k=5,

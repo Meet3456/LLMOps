@@ -116,7 +116,11 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
 
         # get the doc ids for storing inside cache of respective session and query
         # ( redis_client.setex(entry_key, ttl, json.dumps(entry)) )
-        doc_ids = [d.metadata["id"] for d in docs if d.metadata.get("id") is not None]
+        doc_ids = [
+            d.metadata["id"]
+            for d in docs
+            if d.metadata.get("id") and not d.metadata["id"].startswith("__")
+        ]
 
         log.info(
             "List of doc if for document retrieved for the given query : ",

@@ -7,7 +7,7 @@ from db.models import Base
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/chatdb"
+    "DATABASE_URL", "postgresql+asyncpg://chatuser:pass@localhost/chatdb"
 )
 
 engine = create_async_engine(

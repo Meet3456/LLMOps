@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -243,13 +242,9 @@ class DataIngestor:
         # Step 4: create/load FAISS manager
         fm = FaissManager(self.faiss_dir, self.model_loader)
 
-        # Extracting and separating all the texts and metadat from chunks
-        texts = [c.page_content for c in chunks]
-        metadatas = [dict(c.metadata or {}) for c in chunks]
-
-        # load or create faiss index from the text and metadta
+        # load or create faiss index
         try:
-            vs = fm.load_or_create_index(texts=texts, metadatas=metadatas)
+            vs = fm.load_or_create_index()
             log.info(
                 "FAISS loaded or created",
                 index_dir=str(self.faiss_dir),
@@ -261,11 +256,11 @@ class DataIngestor:
                 error=str(e),
                 session_id=self.session_id,
             )
-            vs = fm.load_or_create_index(texts=texts, metadatas=metadatas)
+            vs = fm.load_or_create_index()
 
         # Step 5: add documents idempotently
-        added = fm.add_documents(chunks)
-        log.info("Added documnets to faiss", added=added)
+        fm.add_documents(chunks)
+        log.info("Added documnets to faiss")
 
         # Step 6: return retriever configured with search kwargs
         search_kwargs = {"k": k}
@@ -404,9 +399,7 @@ class FaissManager:
 
         return new_docs
 
-    def load_or_create_index(
-        self, texts: Optional[List[str]], metadatas: Optional[list[dict]]
-    ):
+    def load_or_create_index(self):
         """
         Load existing FAISS index if present; otherwise create a new one using given texts.
         Ensures docstore keys = metadata['id'].
@@ -420,25 +413,23 @@ class FaissManager:
             # Return loaded vectorstore
             return self.vs
 
-        # Create new index if texts provided
-        if not texts:
-            raise DocumentPortalException(
-                "No existing FAISS index and no data to create one", sys
-            )
+        # Create EMPTY FAISS index
 
-        # Ensure the id's exist in metadata:
-        metadatas = metadatas or []
-
-        for i, individual_md in enumerate(metadatas):
-            if "id" not in individual_md:
-                individual_md["id"] = f"doc_{i}_{uuid.uuid4().hex[:8]}"
-
-        ids = [individual_md["id"] for individual_md in metadatas]
-
-        self.vs = FAISS.from_texts(
-            texts=texts, embedding=self.emb, metadatas=metadatas, ids=ids
+        log.info(
+            "Creating new FAISS index with dummy vector", index_dir=str(self.index_dir)
         )
+
+        # Createing a dummy document to initialize FAISS dimension
+        dummy_doc = Document(
+            page_content="__faiss_init__",
+            metadata={"id": "__faiss_init__", "source": "system", "modality": "system"},
+        )
+
+        # Create index with dummy doc
+        self.vs = FAISS.from_documents([dummy_doc], embedding=self.emb)
+
+        # Save index and metadata
         self.vs.save_local(str(self.index_dir))
-        # a helper function to save the _meta at the meta_path:
         self._save_meta()
+
         return self.vs

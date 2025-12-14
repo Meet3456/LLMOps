@@ -1,6 +1,5 @@
-from .custom_logger import CustomLogger
+from .custom_logger import get_logger
 
-# Global logger instance for entire project
-GLOBAL_LOGGER = CustomLogger().get_logger()
+GLOBAL_LOGGER = get_logger("multi_doc_chat")
 
 __all__ = ["GLOBAL_LOGGER"]

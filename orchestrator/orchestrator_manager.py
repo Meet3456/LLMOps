@@ -15,7 +15,7 @@ class OrchestratorManager:
     """
 
     def __init__(self):
-        self.cache
+        self.cache: dict[str, Orchestrator] = {}
 
     def get_orchestrator(self, session_id: str) -> Orchestrator:
         """

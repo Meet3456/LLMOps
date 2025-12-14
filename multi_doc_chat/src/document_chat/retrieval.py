@@ -210,14 +210,16 @@ class RetrieverWrapper:
         for _id in ids:
             try:
                 # get the doc respective to id from the docstore
-                doc = store[_id] 
+                doc = store.search(_id) 
                 # if a doc is found append it to list of "docs" 
                 if doc:
                     docs.append(doc)
-            except KeyError:
-                log.warning("Doc ID not found in FAISS docstore", doc_id=_id)
             except Exception as e:
-                log.warning("Failed to load doc from id", doc_id=_id, error=str(e))
+                log.warning(
+                    "Failed to load doc from id",
+                    doc_id=_id,
+                    error=str(e),
+                )
 
         log.info("docs_from_ids result", num_docs=len(docs))
         return docs
