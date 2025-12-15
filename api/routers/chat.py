@@ -39,7 +39,7 @@ def _normalize_query(q: str) -> str:
     return " ".join(q.lower().strip().split())
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, db=Depends(get_db)):
     """
     Main chat endpoint.
@@ -55,36 +55,29 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
       8. Persist messages
       9. Cache answer
     """
-    session_id = req.session_id
-    log.info("Chat initiated for the follosing session : ", s_id=session_id)
+    session_id = req.session_id.strip()
+    input_query = req.message.strip()
+
     if not session_id:
-        raise HTTPException(status_code=400, detail="no sepecific session")
-
-    input_query = req.message
-
+        raise HTTPException(400, "session_id required")
     if not input_query:
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+        raise HTTPException(400, "message required")
+
+    log.info("Chat request received | session_id=%s", session_id)
 
     # Chat repository which contains helper functions related to database:
     repo = ChatRepository()
 
-    # 1. Validate session
+    # 1. Validate session if it exists in the Database
     if not await repo.if_session_exists(db, session_id):
         raise HTTPException(400, "Invalid Session")
 
     norm_query = _normalize_query(input_query)
 
-    log.info(
-        "Chat request received",
-        session_id=session_id,
-        query=input_query,
-        norm_query=norm_query,
-    )
-
     # 2. Get the answer from the redis cache(if present = fastest)
     cached_ans = get_cached_answer(session_id, norm_query=norm_query)
     if cached_ans:
-        log.info("Answer cache HIT", session_id=session_id)
+        log.info("Answer cache HIT | session_id=%s", session_id)
         return ChatResponse(answer=cached_ans)
 
     # 3. Get orchestrator & retriever for this session
@@ -95,19 +88,16 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
     query_embedding = await run_sync(retriever.embed_query, norm_query)
 
     # 5. Lookup retrieval cache for a query using: semantic or exact norm query match in the redis database
-    cache_entry = lookup_retrieval_entry(
-        session_id, norm_query, query_embedding, semantic_threshold=0.9
-    )
+    cache_entry = lookup_retrieval_entry(session_id, norm_query, query_embedding)
+
+    docs = None
 
     # if cache entry is found then fetch the doc ids from the cache and from ids respective document
     if cache_entry:
         doc_ids = cache_entry["doc_ids"]
         docs = retriever.return_docs_from_ids(ids=doc_ids)
         log.info(
-            "Reused cached retrieval docs",
-            session_id=req.session_id,
-            doc_ids=doc_ids,
-            count=len(docs),
+            f"Reused cached retrieval docs | session_id={session_id} | List_doc_ids={doc_ids} | count_of_docs_retrieved={len(docs)}"
         )
 
     # if cache entry is not found then do normal retrieval:
@@ -123,8 +113,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
         ]
 
         log.info(
-            "List of doc if for document retrieved for the given query : ",
-            list_ids=doc_ids,
+            f"NORMAL RETRIEVER - List of doc_ids of document retrieved for the given query : doc_ids = {doc_ids}",
         )
 
         if doc_ids:
@@ -135,34 +124,60 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
                 doc_ids=doc_ids,
             )
 
-            log.info("Stored retrieval in cache", session_id=req.session_id)
+            log.info(
+                "Stored retrieval cache | session_id=%s | docs=%d",
+                session_id,
+                len(doc_ids),
+            )
 
         else:
             log.info("No docs to cache for retrieval", session_id=req.session_id)
 
-    # 6. Load chat history from DB
-    messages = await repo.get_history(db=db, session_id=session_id)
-    chat_history = []
+    # 6. Load chat history from DB and limit it to 4-5 messages
+    messages = await repo.get_history(
+        db=db, session_id=session_id, limit=5
+    )
 
-    for m in messages:
-        if m.role == "user":
-            chat_history.append(HumanMessage(content=m.content))
-        else:
-            chat_history.append(AIMessage(content=m.content))
+    # Build the langchain compatible chat History
+    chat_history = [
+        HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
+        for m in messages
+    ]
 
-    # 7. Run RAG pipeline through Orchestrator
-    answer = await run_sync(orchestrator.run_rag, input_query, chat_history)
+    # Graph Execution:
+    state = {
+        "input":input_query,
+        "chat_history":chat_history,
+        "orchestrator":orchestrator,
+        "docs":docs,
+        "steps":[]
+    } 
 
-    # 8. Persist messages to DB
-    await repo.add_message_to_db(db, req.session_id, "user", input_query)
-    await repo.add_message_to_db(db, req.session_id, "assistant", answer)
+    try:
+        # Invoke the graph   
+        result = await run_sync(orchestrator.graph.invoke, state)
+        answer = result["output"]
 
-    # 9. Cache final answer
-    cache_answer(req.session_id, norm_query, answer)
+    except Exception as e:
+        log.error(
+            "Chat execution failed | error=%s",str(e),
+        )
+        raise HTTPException(500, "internal_error")
 
-    log.info("Chat turn completed", session_id=req.session_id)
+    # Add the user and ai message to the db
+    await repo.add_message_to_db(
+        db=db,
+        session_id=session_id,
+        messages=[
+            ("user", input_query),
+            ("assistant", answer),
+        ],
+    )
+    # Cache the Final answer along with the normalized user input query to the cache
+    cache_answer(session_id, norm_query, answer)
+
+    log.info("Chat completed | session_id=%s", session_id)
     return ChatResponse(answer=answer)
-
 
 @router.get("/sessions", response_model=list[SessionInfo])
 async def list_sessions(db=Depends(get_db)):

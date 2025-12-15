@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable, List
 
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
-from multi_doc_chat.logger.custom_logger import CustomLogger
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 SUPPORTED_EXTENSIONS = {
     ".pdf",
@@ -27,10 +27,6 @@ SUPPORTED_EXTENSIONS = {
     ".tiff",
     ".webp",
 }
-
-# Local logger instance
-log = CustomLogger().get_logger(__name__)
-
 
 def save_uploaded_files(uploaded_files: Iterable, target_dir: Path) -> List[Path]:
     """
@@ -91,9 +87,9 @@ def save_uploaded_files(uploaded_files: Iterable, target_dir: Path) -> List[Path
 
             saved.append(output_path)
             log.info(
-                "File saved for ingestion", uploaded=name, saved_as=str(output_path)
+                f"File saved for ingestion | uploaded = {name} | saved_as = {str(output_path)}"
             )
         return saved
     except Exception as e:
-        log.error("Failed to save uploaded files", error=str(e), dir=str(target_dir))
+        log.error(f"Failed to save uploaded files | error = {str(e)} | dir = {str(target_dir)}")
         raise DocumentPortalException("Failed to save uploaded files", e) from e

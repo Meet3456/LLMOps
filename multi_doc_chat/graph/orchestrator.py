@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import Literal
 
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
+from multi_doc_chat.graph.builder import build_graph
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
 from multi_doc_chat.src.document_chat.retrieval import RetrieverWrapper
@@ -46,7 +47,11 @@ class Orchestrator:
         # Tools (compound)
         self._init_tools()
 
-        log.info("Orchestrator initialized successfully")
+        # compile the graph once at initialization(build_graph retruns the compoiled graph)
+        self.graph = build_graph()
+
+        # we pass the index path in orchestrator manager:
+        log.info("Orchestrator initialized | index_path=%s", index_path)
 
     # Function which initializes retriever:
     def _init_retriever(self, index_path: str):
@@ -72,7 +77,7 @@ class Orchestrator:
             retriever_config=retriever_config,
             reranker_config=reranker_cfg,
         )
-        log.info("Retriever initialized successfully")
+        log.info("Retriever initialized successfully | index_path=%s", index_path)
 
     # Function which initializes llms
     def _init_models(self):
@@ -131,10 +136,10 @@ class Orchestrator:
                 "approx_tokens": token_approx,
             }
 
-            log.info("Routing signals", signals=signals)
+            log.info(f"Routing signals | signals = {signals}")
             return signals
         except Exception as e:
-            log.error("Failed to generate routing signals", error=str(e))
+            log.error(f"Failed to generate routing signals | error = {str(e)}")
             raise DocumentPortalException(
                 "Error in genereating routing signals", e
             ) from e
@@ -154,14 +159,14 @@ class Orchestrator:
 
             # Invoke the chain with necessary inputs
             result = chain.invoke({"input": query, "signals": json.dumps(signals)})
-            log.info("Routing llm result", langchain_result=result)
+            log.info("Langchain llm result | langchain_result=%s", result)
 
             selected_route = result.source
-            log.info("Router LLM result", route_selected=selected_route)
+            log.info(f"Fetching the llm result | route_selected={selected_route}")
 
             return selected_route
         except Exception as e:
-            log.error("Failed to find the selected route", error=str(e))
+            log.error("Router failed | error=%s", str(e))
             return "reasoning"
 
     # Function which runs the rag pipeline(if rourted to rag node):
@@ -198,15 +203,15 @@ class Orchestrator:
                 docs = self.retriever.retrieve(query)
 
             len_docs = len(docs)
-            log.info("Length of retrieved docs for RAG", docs=len_docs)
+            log.info("Length of retrieved docs for RAG | docs=%d ", len_docs)
 
-            if not docs or len(docs)==0:
+            if not docs or len(docs) == 0:
                 log.info("RAG: no documents retrieved")
                 return (
                     "I don't know based on the available documents. "
                     "I could not find any relevant content in the knowledge base."
                 )
-            
+
             # Fetch the content from docs and builf the context:
             context = "\n\n".join(getattr(d, "page_content", str(d)) for d in docs)
 
@@ -220,23 +225,25 @@ class Orchestrator:
 
         except Exception as e:
             log.error(
-                "Rag pipeline error", error=str(e), traceback=traceback.format_exc()
+                "RAG failed | error=%s | traceback=%s",
+                str(e),
+                traceback.format_exc(),
             )
-            raise DocumentPortalException("error in run rag function", e) from e
+            raise DocumentPortalException("RAG pipeline failed", e)
 
     # Function ehich runs the reasoning pipeline(if routed to reasoning node)
     def run_reasoning(self, query: str):
         try:
             resp = self.reasoning_llm.invoke([{"role": "user", "content": query}])
+
             # Extract final answer
             content = getattr(resp, "content", "") or ""
-            log.info("Content from the llmreasoning response:", content=content)
 
             # Extract reasoning (Qwen stores it inside response_metadata)
             if hasattr(resp, "additional_kwargs"):
                 reasoning = resp.additional_kwargs.get("reasoning_content")
 
-            log.info("Reasoning response", has_reasoning=reasoning is not None)
+            log.info("Reasoning response | has_reasoning=%s ", reasoning)
 
             # Return combined or separate depending on your UI design
             if reasoning:
@@ -244,12 +251,8 @@ class Orchestrator:
             return content
 
         except Exception as e:
-            log.error(
-                "Reasoning pipeline error",
-                error=str(e),
-                traceback=traceback.format_exc(),
-            )
-            return f"Reasoning error: {str(e)}"
+            log.error("Reasoning failed | error=%s", str(e))
+            return "Reasoning failed."
 
     # Function ehich runs the tool pipeline(if routed to tool node)
     def run_tools(self, query: str):
@@ -270,9 +273,5 @@ class Orchestrator:
             return result.get("content", "")
 
         except Exception as e:
-            log.error(
-                "Tool pipeline error",
-                error=str(e),
-                traceback=traceback.format_exc(),
-            )
-            return f"Tool error: {str(e)}"
+            log.error("Tools failed | error=%s", str(e))
+            return "Tool execution failed."

@@ -119,29 +119,33 @@ async def _process_single_path(
                             }
                         )
                     except Exception as e:
-                        log.warning(
-                            "extract_image failed",
-                            file=str(p),
-                            page=i + 1,
-                            error=str(e),
-                        )
+                        log.warning(f"extract_image failed | file = {str(p)} | page = {i + 1} | error = {str(e)}")
 
             if caption_tasks:
                 captions = await asyncio.gather(*caption_tasks)
 
                 # Iterate over the generated List of captions for all images and the respective metadata
                 for cap_result, meta in zip(captions, image_meta):
-                    if cap_result.get("caption"):
-                        docs.append(
-                            Document(
-                                page_content=cap_result["caption"],
-                                metadata={
-                                    "modality": "image",
-                                    "source": meta["source"],
-                                    "page": meta["page"],
-                                },
-                            )
+                    caption = cap_result.get("caption")
+
+                    if not isinstance(caption, str):
+                        log.warning(
+                            "Invalid caption type | type=%s | value=%s",
+                            type(caption).__name__,
+                            repr(caption),
                         )
+                        caption = "[Invalid image caption skipped]"
+
+                    docs.append(
+                        Document(
+                            page_content=caption,
+                            metadata={
+                                "modality": "image",
+                                "source": meta["source"],
+                                "page": meta["page"],
+                            },
+                        )
+                    )
             pdf.close()
 
         elif extension == ".docx":
@@ -227,10 +231,10 @@ async def _process_single_path(
                 )
 
         else:
-            log.warning("Unsupported extension skipped", path=str(p))
+            log.warning(f"Unsupported extension skipped | path={str(p)}")
 
     except Exception as e:
-        log.error("Failed processing file", file=str(p), error=str(e))
+        log.error(f"Failed processing file | file={str(p)} | error = {str(e)}")
         raise DocumentPortalException(
             f"Failed processing file {str(p)}: {str(e)}"
         ) from e
@@ -248,7 +252,7 @@ async def load_documents_and_assets(
 
         # flatten the list of lists
         all_docs = [doc for doc_list in results for doc in doc_list]
-        log.info("Documents & assets loaded", count=len(all_docs))
+        log.info(f"Documents & assets loaded | count= {len(all_docs)}")
 
         for doc in all_docs:
             # just for debugging purpose
@@ -261,5 +265,5 @@ async def load_documents_and_assets(
         return all_docs
 
     except Exception as e:
-        log.error("Failed loading documents/assets", error=str(e))
+        log.error("Failed loading documents/assets | error=%s", str(e))
         raise DocumentPortalException("Error loading documents/assets", e) from e

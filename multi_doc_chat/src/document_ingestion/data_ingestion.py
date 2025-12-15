@@ -86,16 +86,10 @@ class DataIngestor:
 
             log.info(
                 "ChatIngestor initialized",
-                session_id=self.session_id,
-                temp_dir=str(self.temp_dir),
-                faiss_dir=str(self.faiss_dir),
-                sessionized=self.use_session,
-                images=str(self.images_dir),
-                tables=str(self.tables_dir),
             )
 
         except Exception as e:
-            log.error("Failed to initialize ChatIngestor", error=str(e))
+            log.error(f"Failed to initialize ChatIngestor | error = {str(e)}")
             raise DocumentPortalException(
                 "Initialization error in ChatIngestor", e
             ) from e
@@ -158,19 +152,7 @@ class DataIngestor:
                     p.metadata.setdefault("modality", "text")
                     out_chunks.append(p)
 
-        log.info(
-            "Multimodal split complete",
-            text_chunks=len(
-                [c for c in out_chunks if c.metadata.get("modality", "text") == "text"]
-            ),
-            table_chunks=len(
-                [c for c in out_chunks if c.metadata.get("modality") == "table"]
-            ),
-            image_chunks=len(
-                [c for c in out_chunks if c.metadata.get("modality") == "image"]
-            ),
-            session_id=self.session_id,
-        )
+        log.info("Multimodal split complete")
         return out_chunks
 
     async def built_retriever(
@@ -185,26 +167,18 @@ class DataIngestor:
         lambda_mult: float = 0.5,
     ):
         log.info(
-            "Starting ingestion: saving uploaded files",
-            count=len(list(paths)),
-            session_id=self.session_id,
+            f"Starting ingestion: saving uploaded files | count = {len(list(paths))}"
         )
 
         # Step 1: persist files to temp dir (save_uploaded_files returns Path list)
         paths = save_uploaded_files(paths, self.temp_dir)
-        log.info(
-            "Files saved to temp dir for the given session",
-            saved=[str(p) for p in paths],
-            session_id=self.session_id,
-        )
+        log.info("Files saved | count=%d | session_id=%s", len(paths), self.session_id)
 
         # Step 2: async load docs & assets (text, tables, images/captions) from the list of paths
         docs = await load_documents_and_assets(
             paths, images_dir=self.images_dir, tables_dir=self.tables_dir
         )
-        log.info(
-            "Loaded documents & assets", count=len(docs), session_id=self.session_id
-        )
+        log.info("Documents loaded | count=%d", len(docs))
 
         if not docs:
             raise ValueError("No valid documents loaded")
@@ -218,12 +192,6 @@ class DataIngestor:
             chunk_overlap_table=50,
         )
 
-        log.info(
-            "Total chunks after splitting",
-            chunks=len(chunks),
-            session_id=self.session_id,
-        )
-
         # Step 3a: ensure each chunk has a stable unique ID in metadata
         for idx, individual_c in enumerate(chunks):
             md = dict(individual_c.metadata or {})
@@ -232,12 +200,7 @@ class DataIngestor:
                 md["id"] = f"{self.session_id}__{idx}_{uuid.uuid4().hex[:8]}"
             individual_c.metadata = md
 
-        log.info(
-            "Assigned stable IDs to chunks",
-            total_chunks=len(chunks),
-            example_id=chunks[0].metadata.get("id") if chunks else None,
-            session_id=self.session_id,
-        )
+        log.info("Chunk IDs assigned | total_chunks=%d", len(chunks))
 
         # Step 4: create/load FAISS manager
         fm = FaissManager(self.faiss_dir, self.model_loader)
@@ -246,15 +209,12 @@ class DataIngestor:
         try:
             vs = fm.load_or_create_index()
             log.info(
-                "FAISS loaded or created",
-                index_dir=str(self.faiss_dir),
-                session_id=self.session_id,
+                f"FAISS loaded or created | index_dir = {str(self.faiss_dir)} | session_id = {self.session_id}"
             )
+
         except Exception as e:
             log.warning(
-                "First attempt to load/create FAISS failed, retrying",
-                error=str(e),
-                session_id=self.session_id,
+                f"First attempt to load/create FAISS failed, retrying | error={str(e)} | session_id = {self.session_id}"
             )
             vs = fm.load_or_create_index()
 
@@ -272,7 +232,7 @@ class DataIngestor:
             search_type=search_type, search_kwargs=search_kwargs
         )
         log.info(
-            "Retriever ready", search_type=search_type, k=k, session_id=self.session_id
+            f"Retriever ready | search_type = {search_type} | k = {k} | session_id = {self.session_id}"
         )
         return retriever
 
@@ -300,17 +260,17 @@ class FaissManager:
                     "rows": {}
                 }
                 log.info(
-                    "Loaded existing FAISS metadata",
-                    index_dir=str(self.index_dir),
-                    entries=len(self._meta.get("rows", {})),
+                    "Loaded existing FAISS metadata | entries=%d | index_dir=%s",
+                    len(self._meta.get("rows", {})),
+                    str(self.index_dir),
                 )
             # If it does not exists then initialize it as a wmpty dictionary with key - "rows"
             except Exception as e:
                 self._meta = {"rows": {}}
                 log.error(
-                    "Failed to load FAISS metadata",
-                    index_dir=str(self.index_dir),
-                    error=str(e),
+                    "Failed to load FAISS metadata | error=%s | index_dir=%s",
+                    str(e),
+                    str(self.index_dir),
                 )
 
         self.model_loader = model_loader or ModelLoader()
@@ -358,7 +318,7 @@ class FaissManager:
 
             # if the key already exists in the meta-data rows - Then skip it and continue
             if key in self._meta.get("rows", {}):
-                log.debug("Skipping already-ingested document", fingerprint=key)
+                log.debug("Skipping already-ingested document | fingerprint=%s", key)
                 continue
 
             # else store minimal data and diagnostics in metadata
@@ -392,9 +352,9 @@ class FaissManager:
             self._save_meta()
 
             log.info(
-                "Added new documents to FAISS index",
-                new_count=len(new_docs),
-                index_dir=str(self.index_dir),
+                "Added new documents to FAISS index | new_count=%d | index_dir=%s",
+                len(new_docs),
+                str(self.index_dir),
             )
 
         return new_docs
@@ -405,7 +365,7 @@ class FaissManager:
         Ensures docstore keys = metadata['id'].
         """
         if self._exists():
-            log.info("Loading existing FAISS index", index_dir=str(self.index_dir))
+            log.info("Loading existing FAISS index | index_dir=%s", str(self.index_dir))
 
             self.vs = FAISS.load_local(
                 str(self.index_dir), self.emb, allow_dangerous_deserialization=True
@@ -416,7 +376,8 @@ class FaissManager:
         # Create EMPTY FAISS index
 
         log.info(
-            "Creating new FAISS index with dummy vector", index_dir=str(self.index_dir)
+            "Creating new FAISS index with dummy vector | index_dir=%s",
+            str(self.index_dir),
         )
 
         # Createing a dummy document to initialize FAISS dimension

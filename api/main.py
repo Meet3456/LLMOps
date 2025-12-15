@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers import chat, data_upload, health
 from db.database import init_db
+from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 app = FastAPI(title="Multi-Document RAG Backend", version="1.0")
 
@@ -26,7 +27,9 @@ app.include_router(data_upload.router, tags=["upload"])  # /upload
 # Startup event -> initialize DB tables
 @app.on_event("startup")
 async def startup_event():
+    log.info("Application startup initiated")
     await init_db()
+    log.info("Application startup completed")
 
 
 @app.get("/")

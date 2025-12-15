@@ -38,10 +38,8 @@ class RetrieverWrapper:
         self.last_best_distance: Optional[float] = None
 
         log.info(
-            "RetrieverWrapper initialized",
-            retriever_cfg=self.retriever_config,
-            reranker_config=self.reranker_config,
-            reranker_enabled=bool(self.reranker),
+            "RetrieverWrapper initialized | reranker_enabled=%s",
+            bool(self.reranker),
         )
 
     def quick_relevance_check(self, query: str) -> Tuple[bool, Optional[float]]:
@@ -64,7 +62,7 @@ class RetrieverWrapper:
 
             num_docs = len(docs_with_scores)
 
-            log.info("Doc-check: retrieved docs", num_docs=num_docs)
+            log.info(f"Doc-check: retrieved docs | num_docs={num_docs}")
 
             # If no docs found, not relevant set last_best_distance to None and is query relevant to doc to False
             if not docs_with_scores or num_docs == 0:
@@ -77,13 +75,8 @@ class RetrieverWrapper:
             # converting the best faiss distance to similarity:
             faiss_sim = 1 / (1 + best_faiss)
 
-            log.info("fAISS normalized similarity score : ", faiss_sim=faiss_sim)
-
-            log.info(
-                "Doc-check (FAISS)",
-                list_of_all_scores=faiss_scores,
-                best_score=best_faiss,
-            )
+            log.info(f"Doc-check (FAISS) | list_of_all_scores = {faiss_scores} | best_score = {best_faiss}")
+            log.info(f"FAISS normalized similarity score | faiss_sim = {faiss_sim}")
 
             if self.reranker:
                 log.info("Applying the reranker logic")
@@ -91,51 +84,35 @@ class RetrieverWrapper:
                 # Creating the pairs of query and docs fetched from faiss
                 pairs = [(query, doc.page_content) for doc, _ in docs_with_scores]
                 # Passing it to the reranker model and getting the reranked scores
-                rerank_scores = self.reranker.predict(pairs, batch_size=8)
+                rerank_scores = self.reranker.predict(pairs, batch_size=16)
 
                 # convert numpy types:
                 rerank_scores = [float(s) for s in rerank_scores]
                 # getting the best reranked scored:
                 best_rerank = max(rerank_scores)
 
-                log.info(
-                    "Doc-check (Reranker)",
-                    reranked_scores=rerank_scores,
-                    best_reranked_Score=best_rerank,
-                )
-
+                log.info(f"Doc-check (Reranker) | reranked_scores = {rerank_scores} | best_reranked_Score = {best_rerank}")
+    
                 # Convert reranker output to normalized similarity
                 rerank_sim = 1 / (1 + math.exp(-best_rerank))
-                log.info(
-                    "Rerankers normalized similarit score : ", rerank_sim=rerank_sim
-                )
+                log.info(f"Rerankers normalized similarity score | rerank_sim = {rerank_sim}")
 
             # Weighted combination of faiss and reranker scores
             alpha = self.reranker_config.get("faiss_weight", 0.6)
             beta = self.reranker_config.get("rerank_weight", 0.4)
 
             final_score = alpha * faiss_sim + beta * rerank_sim
-            log.info(
-                "Final score after combining normaloized faiss and rerank score: ",
-                final_score=final_score,
-            )
+            log.info(f"Final score after combining normaloized faiss and rerank score | final_score = {final_score}")
 
             # Save for router
             self.last_best_distance = final_score
 
             is_relevant = final_score >= 0.56
 
-            # If no reranker installed → fallback to FAISS thresholding
-            # log.info("Reranked disabled - applying basic faiss thresholding logic")
-            # is_relevant = best_faiss <= self.retriever_config.get(
-            #     "score_threshold", 0.55
-            # )
-            # self.last_best_distance = best_faiss
             return is_relevant, final_score
 
         except Exception as e:
-            log.error(f"Relevance check failed: {e}")
-            self.last_best_distance = None
+            log.error("Quick relevance check failed | error=%s", str(e))
             return False, None
 
     def retrieve(self, query: str) -> List[Document]:
@@ -159,20 +136,12 @@ class RetrieverWrapper:
             if self.retriever_config.get("search_type") == "mmr":
                 lambda_mult = self.retriever_config.get("lambda_mult", 0.5)
 
-                log.info(
-                    "using MMR Search for retrieval with config parameters",
-                    final_k_sent_to_RAG_LLM=top_k_for_mmr,
-                    fetch_k=fetch_k_mmr,
-                    lambda_mult=lambda_mult,
-                )
+                log.info(f"using MMR Search for retrieval with config parameters | final_k_sent_to_RAG_LLM = {top_k_for_mmr} | fetch_k = {fetch_k_mmr} | lambda_mult = {lambda_mult}")
 
                 docs = self.vectorestore.max_marginal_relevance_search(
                     query, k=top_k_for_mmr, fetch_k=fetch_k_mmr, lambda_mult=lambda_mult
                 )
-                log.info(
-                    "Length of documents retrieved for mmr search - ",
-                    num_docs=len(docs),
-                )
+                log.info(f"Length of documents retrieved for mmr search | num_docs = {len(docs)}")
             else:
                 # if search type is not set to mmr then retrieve using basic similarity search
                 docs = self.vectorestore.similarity_search(query, k=fetch_k)
@@ -188,7 +157,7 @@ class RetrieverWrapper:
             # Get the top 5 reranked docs:
             final_docs = [d for d, s in reranked[:final_k]]
 
-            log.info("Final reranked retrieval", final_count=len(final_docs))
+            log.info(f"Final reranked retrieval | final_count = {len(final_docs)}")
 
             return final_docs
         except Exception as e:
@@ -210,18 +179,18 @@ class RetrieverWrapper:
         for _id in ids:
             try:
                 # get the doc respective to id from the docstore
-                doc = store.search(_id) 
-                # if a doc is found append it to list of "docs" 
+                doc = store.search(_id)
+                # if a doc is found append it to list of "docs"
                 if doc:
                     docs.append(doc)
             except Exception as e:
                 log.warning(
-                    "Failed to load doc from id",
-                    doc_id=_id,
-                    error=str(e),
+                    "Failed to restore doc | id=%s | error=%s",
+                    _id,
+                    str(e),
                 )
 
-        log.info("docs_from_ids result", num_docs=len(docs))
+        log.info("Docs restored from cache | count=%d", len(docs))
         return docs
 
     def embed_query(self, query: str) -> List[float]:
@@ -231,12 +200,9 @@ class RetrieverWrapper:
           - Semantic retrieval
           - Semantic retrieval-cache matching
         """
-        try:
-            embd_func = getattr(self.vectorestore, "embedding_function", None)
-            if embd_func is None:
-                raise ValueError("Vectorstore has no embedding_function")
-            # return the embedded query:
-            return embd_func.embed_query(query)
-        except Exception as e:
-            log.error(f"Failed to embed query: {e}")
-            raise
+        embd_func = getattr(self.vectorestore, "embedding_function", None)
+        if embd_func is None:
+            raise ValueError("Vectorstore has no embedding_function")
+        # return the embedded query:
+        return embd_func.embed_query(query)
+        

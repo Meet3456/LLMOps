@@ -39,7 +39,7 @@ async def uploadFiles(files: list[UploadFile] = File(...), db=Depends(get_db)):
 
     # creating session in the Datbase:
     session_id = await chat_repo.create_session(db=db)
-    log.info("Upload started", session_id=session_id, num_files=len(files))
+    log.info(f"Upload started | session_id={session_id} | num_files = {len(files)}")
 
     # Building the Faiss index:
     ingestor = DataIngestor(session_id=session_id)
@@ -58,5 +58,5 @@ async def uploadFiles(files: list[UploadFile] = File(...), db=Depends(get_db)):
         lambda_mult=0.5,
     )
 
-    log.info("Upload completed and FAISS index built", session_id=session_id)
+    log.info(f"Upload completed and FAISS index built | session_id = {session_id}")
     return {"session_id": session_id, "indexed": True}

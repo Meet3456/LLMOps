@@ -1,4 +1,3 @@
-from multi_doc_chat.graph.orchestrator import Orchestrator
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
 
 """
@@ -20,7 +19,7 @@ def router_node(state):
     - Else if it requires tools → tool agent
     - Otherwise → reasoning agent
     """
-    orchestrator: Orchestrator = state["orchestrator"]
+    orchestrator = state["orchestrator"]
     user_query = state["input"]
     chat_history = state.get("chat_history", [])
 
@@ -29,20 +28,25 @@ def router_node(state):
     # Calls {route_query} function in orchestrator which decides which node to be routed to:
     routing_decision = orchestrator.route_query(user_query, chat_history)
 
-    log.info("Router node decision", route=routing_decision)
+    log.info("Router node decision | routing_decision=%s", routing_decision)
 
     return {"route": routing_decision, "steps": _append_step(state, "router")}
 
 
 def rag_node(state):
-    orchestrator: Orchestrator = state["orchestrator"]
-    user_query = state["input"]
+    orchestrator = state["orchestrator"]
+    user_query = state.get("input")
+    # will get the last 5 messages as we limited to 5
     chat_history = state.get("chat_history", [])
+    docs = state.get("docs")
 
-    log.info("RAG node invoked")
+    log.info(
+        "RAG node invoked | cached_docs=%s",
+        state.get("docs") is not None,
+    )
 
     # Calls {run_rag} function in orchestrator which runs the RAG Pipeline:
-    response = orchestrator.run_rag(user_query, chat_history)
+    response = orchestrator.run_rag(user_query, chat_history, docs)
 
     return {
         "output": response,
@@ -51,7 +55,7 @@ def rag_node(state):
 
 
 def reasoning_node(state):
-    orchestrator: Orchestrator = state["orchestrator"]
+    orchestrator = state["orchestrator"]
     query = state["input"]
 
     log.info("Reasoning node invoked")
@@ -66,7 +70,7 @@ def reasoning_node(state):
 
 
 def tool_node(state):
-    orchestrator: Orchestrator = state["orchestrator"]
+    orchestrator = state["orchestrator"]
     query = state["input"]
 
     log.info("Tools node invoked")

@@ -16,29 +16,36 @@ class ChatRepository:
         db.add(s)
         await db.commit()
         await db.refresh(s)
-        log.info("New session created", session_id=s.id)
+        log.info("New session created | session_id=%s", s.id)
         return s.id
 
     async def if_session_exists(self, db: AsyncSession, session_id: str) -> bool:
         out = await db.execute(select(Session).where(Session.id == session_id))
         exists = out.scalar() is not None
-        log.info("Session existence check", session_id=session_id, exists=exists)
+
+        log.info(
+            "Session existence check | session_id=%s | exists=%s",
+            session_id,
+            exists,
+        )
         return exists
 
     async def add_message_to_db(
-        self, db: AsyncSession, session_id: str, role: str, content: str
+        self,
+        db: AsyncSession,
+        session_id: str,
+        messages: list[tuple[str, str]],
     ):
-        message = Message(session_id=session_id, role=role, content=content)
-        db.add(message)
+        objs = [Message(session_id=session_id, role=r, content=c) for r, c in messages]
+        db.add_all(objs)
         await db.commit()
-        log.info(
-            "Message added to DB",
-            session_id=session_id,
-            role=role,
-            content_preview=content[:50],
-        )
 
-    async def get_history(self, db: AsyncSession, session_id: str):
+        log.info(
+            "Messages persisted | session_id=%s | count=%d",
+            session_id,
+            len(objs),
+        )
+    async def get_history(self, db: AsyncSession, session_id: str, limit: int):
         """
         Get all messages of a session ordered by creation time.
         Used to build chat_history for RAG.
@@ -47,9 +54,14 @@ class ChatRepository:
             select(Message)
             .where(Message.session_id == session_id)
             .order_by(Message.created_at)
+            .limit(limit)
         )
-        rows = out.scalars().all()
-        log.info("Loaded chat history", session_id=session_id, count=len(rows))
+        rows = list(reversed(out.scalars().all()))
+        log.info(
+            "Loaded recent history | session_id=%s | count=%d",
+            session_id,
+            len(rows),
+        )
         return rows
 
     async def list_sessions(self, db: AsyncSession):
@@ -59,5 +71,5 @@ class ChatRepository:
         """
         q = await db.execute(select(Session).order_by(Session.created_at.desc()))
         sessions = q.scalars().all()
-        log.info("Listing sessions", count=len(sessions))
+        log.info(f"Listing sessions | count = {len(sessions)}")
         return sessions

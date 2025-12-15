@@ -54,7 +54,7 @@ class ModelLoader:
 
         # Load configuration
         self.config = load_config()
-        log.info("YAML config loaded", config_keys=list(self.config.keys()))
+        log.info(f"YAML config loaded | config_keys = {list(self.config.keys())}")
 
         self.reranker = self._load_reranker()
 
@@ -93,12 +93,12 @@ class ModelLoader:
         """
         try:
             model_name = self.config["embedding_model"]["model_name"]
-            log.info("Loading embedding model", model=model_name)
+            log.info("Loading embeddings | model=%s", model_name)
             return GoogleGenerativeAIEmbeddings(
                 model=model_name, google_api_key=self.api_keys.get("GOOGLE_API_KEY")
             )
         except Exception as e:
-            log.error("Error loading embedding model", error=str(e))
+            log.error(f"Error loading embedding model | error = {str(e)}")
             raise DocumentPortalException("Failed to load embedding model", sys)
 
     # logic to select groq api key based on role
@@ -127,7 +127,7 @@ class ModelLoader:
         """
         # role in {"rag", "reasoning", "tools"}
         if role not in self.config["llm"]:
-            log.error("LLM role not found in config", role=role)
+            log.error(f"LLM role not found in config | role = {role}")
             raise ValueError(f"LLM role '{role}' not found in config")
 
         # get the respectieve llm config for specified role:
@@ -138,7 +138,7 @@ class ModelLoader:
         temp = llm_config.get("temperature")
         max_t = llm_config.get("max_tokens")
 
-        log.info(f"Loading LLM for role={role}", model=model)
+        log.info("Loading LLM | role=%s | provider=%s", role, provider)
 
         if provider == "google":
             return ChatGoogleGenerativeAI(

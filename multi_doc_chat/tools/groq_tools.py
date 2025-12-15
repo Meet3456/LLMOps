@@ -22,7 +22,7 @@ class GroqToolClient:
         self.idx = 0
         self.client = self._make(valid[self.idx])
 
-        log.info("GroqToolClient initialized", keys=len(valid))
+        log.info(f"GroqToolClient initialized | keys = {len(valid)}")
 
     def _make(self, key: str) -> Groq:
         return Groq(api_key=key)
@@ -30,7 +30,7 @@ class GroqToolClient:
     def _rotate(self):
         self.idx = (self.idx + 1) % len(self.api_keys)
         self.client = self._make(self.api_keys[self.idx])
-        log.warning("Rotated Groq API key", new_index=self.idx)
+        log.warning("Rotated Groq API key | new_index=%d",self.idx)
 
     def call_compound(
         self, user_prompt, model, enabled_tools, max_tokens, stream=False
@@ -63,7 +63,7 @@ class GroqToolClient:
                 }
 
             except Exception as e:
-                log.warning("Compound call failed", error=str(e))
+                log.warning(f"Compound call failed | error={str(e)}")
                 self._rotate()
 
         raise DocumentPortalException("All Groq API keys failed during compound call")

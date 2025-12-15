@@ -12,10 +12,9 @@ def extract_tables_from_pdf(pdf_path: str) -> List[Dict]:
     Each dictionary contains the table data in a structured format.
     """
     tables = []
-    log.info("Extracting table for the following doc path : ",path=pdf_path)
     try:
         cat = camelot.read_pdf(pdf_path, pages="all", flavor="lattice")
-        log.info("PDF tables detected", file=pdf_path, count=len(cat))
+        log.info(f"PDF tables detected | file = {pdf_path} | count = {len(cat)}")
 
         for i, table in enumerate(cat):
             # convert the table into df:
@@ -49,7 +48,7 @@ def extract_tables_from_csv(csv_path: str) -> List[Dict]:
             }
         ]
     except Exception as e:
-        log.warning("CSV read failed", file=csv_path, error=str(e))
+        log.warning(f"CSV read failed | file = {csv_path} |  error = {str(e)}")
         return []
 
 
@@ -63,5 +62,5 @@ def html_tables_to_json(html_path: str) -> List[Dict]:
             )
         return tables
     except Exception as e:
-        log.warning("HTML table extraction failed", file=html_path, error=str(e))
+        log.warning(f"HTML table extraction failed | file = {html_path} |  error = {str(e)}")
         return []

@@ -20,11 +20,8 @@ def get_client():
         client = AsyncGroq(api_key=api_key)
     return client
 
-
-MAX_GROQ_CONCURRENCY = int(os.getenv("MAX_GROQ_CONCURRENCY", 12))
-
 # Global semaphore to limit concurrent Groq calls
-semaphore = asyncio.Semaphore(MAX_GROQ_CONCURRENCY)
+semaphore = asyncio.Semaphore(int(os.getenv("MAX_GROQ_CONCURRENCY", 8)))
 
 # shared thread pool exector
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
@@ -100,11 +97,7 @@ async def caption_image_from_bytes(
 
     for attempt in range(1, retries + 1):
         try:
-            log.debug(
-                "Captioning image from bytes",
-                attempt=attempt,
-                retries=retries,
-            )
+            log.debug(f"Captioning image from bytes | attempt={attempt} | retries={retries}")
 
             captions = await _caption_request(
                 [base_64],
@@ -116,14 +109,14 @@ async def caption_image_from_bytes(
             )
 
             caption_text = captions[0] if captions else ""
-            log.debug("Captioning successful", caption=caption_text)
-            return {"caption": caption_text}
+            log.debug(f"Captioning successful | caption = {caption_text}")
+            return {"caption": caption_text or "[Image caption unavailable]"}
         except asyncio.TimeoutError:
-            log.warning("Groq caption timeout", attempt=attempt)
+            log.warning("Groq caption timeout | attempt=%d",attempt)
         except Exception as e:
-            log.warning("Groq caption error", attempt=attempt, error=str(e))
+            log.warning(f"Groq caption error | attempt={attempt} | error={str(e)}")
 
-    return {"caption": "", "error": "caption_failed"}
+    return {"caption": "[Image caption failed due to rate limits]"}
 
 
 async def caption_image(
@@ -147,9 +140,5 @@ async def caption_image(
         return await caption_image_from_bytes(image_bytes, prompt=prompt, **kwargs)
 
     except Exception as e:
-        log.error(
-            "Image captioning failed",
-            error=str(e),
-            path=image_path,
-        )
-        return {"caption": "", "error": str(e)}
+        log.error(f"Image captioning failed | error = {str(e)} | path={image_path}")
+        return {"caption": "", "error": str(e)} 

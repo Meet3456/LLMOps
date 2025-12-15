@@ -29,9 +29,9 @@ def cache_answer(session_id: str, norm_query: str, answer: str, ttl: int = 86400
     key = f"ans:{session_id}:{hash_str(norm_query)}"
     try:
         redis_client.setex(key, ttl, answer)
-        log.debug("Cached answer for key", key=key)
+        log.debug(f"Cached answer for key | key={key}")
     except Exception as e:
-        log.warning("Failed to cache answer", error=str(e))
+        log.warning("Answer cache failed | error=%s", str(e))
 
 
 def get_cached_answer(session_id: str, norm_query: str) -> Optional[str]:
@@ -43,14 +43,12 @@ def get_cached_answer(session_id: str, norm_query: str) -> Optional[str]:
     try:
         value = redis_client.get(key)
         if value:
-            log.debug(
-                "LLM Answer successfully retrieved from cache for key : ", key=key
-            )
+            log.debug(f"LLM Answer successfully retrieved from cache for key | key={key}")
         else:
-            log.debug("Answer cache MISS", key=key)
+            log.debug(f"Answer cache MISS | key={key}")
         return value
     except Exception as e:
-        log.warning("Failed to fetch cached answer", error=str(e))
+        log.warning("Answer cache lookup failed | error=%s", str(e))
         return None
 
 
@@ -132,14 +130,9 @@ def store_retrieved_result_entry(
         # expiration
         redis_client.expire(idx_key, ttl)
 
-        log.debug(
-            "Stored retrieval entry",
-            session_id=session_id,
-            norm_query=norm_query,
-            doc_ids_count=len(doc_ids),
-        )
+        log.debug(f"Stored retrieval entry | session_id = {session_id} | norm_query = {norm_query} | doc_ids_count = {len(doc_ids)}")
     except Exception as e:
-        log.warning("Failed to store retrieval entry", error=str(e))
+        log.warning("Failed storing retrieval cache | error=%s", str(e))
 
 
 def lookup_retrieval_entry(
@@ -164,7 +157,7 @@ def lookup_retrieval_entry(
 
         cached_docs = redis_client.get(exact_key)
         if cached_docs:
-            log.debug("Retrieval cache HIT (exact)", session_id=session_id)
+            log.debug(f"Retrieval cache HIT (exact) for | session_id = {session_id}")
             return json.loads(cached_docs)
 
         # Case:2 - Semantic matching between the current user query and the cached queries:
@@ -174,10 +167,7 @@ def lookup_retrieval_entry(
         prev_hashed_query_keys = redis_client.smembers(idx_key)
 
         if not prev_hashed_query_keys:
-            log.debug(
-                "Retrieval cache MISS (no index for the respective session)",
-                session_id=session_id,
-            )
+            log.debug(f"Retrieval cache MISS (no index for the respective session | session_id = {session_id}")
             return None
 
         best_entry = None
@@ -196,18 +186,12 @@ def lookup_retrieval_entry(
                 best_entry = entry
 
         if best_entry and best_sim >= semantic_threshold:
-            log.debug(
-                "Retrieval cache HIT (semantic)",
-                session_id=session_id,
-                sim=best_sim,
-            )
+            log.debug(f"Retrieval cache HIT (semantic) | session_id = {session_id} | sim ={best_sim}")
             return best_entry
 
-        log.debug(
-            "Retrieval cache MISS (semantic)", session_id=session_id, best_sim=best_sim
-        )
+        log.debug(f"Retrieval cache MISS (semantic) | session_id = {session_id} | best_sim = {best_sim}")
         return None
 
     except Exception as e:
-        log.warning("Failed to lookup retrieval entry", error=str(e))
+        log.warning("Retrieval cache lookup failed | error=%s", str(e))
         return None
