@@ -6,6 +6,7 @@ class GraphState(TypedDict):
     chat_history: List[Any]
     orchestrator: Any
     docs: Optional[List[Any]]
+    skip_retrieval: bool
     route: Literal["rag", "reasoning", "tools"]
     output: Any
     steps: List[str]

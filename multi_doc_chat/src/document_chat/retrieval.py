@@ -1,4 +1,4 @@
-import math
+import math 
 from typing import List, Optional, Tuple
 
 from langchain_core.documents import Document
@@ -53,7 +53,7 @@ class RetrieverWrapper:
             Tuple of (is_query_relevant_to_document: bool, relevance_score: float or none)
         """
         try:
-            top_k_for_check = self.reranker_config.get("top_k_routing", 10)
+            top_k_for_check = self.reranker_config.get("top_k_routing", 8)
 
             # Retrieve documents with similarity scores - top_k_for_check
             docs_with_scores = self.vectorestore.similarity_search_with_score(
@@ -75,7 +75,9 @@ class RetrieverWrapper:
             # converting the best faiss distance to similarity:
             faiss_sim = 1 / (1 + best_faiss)
 
-            log.info(f"Doc-check (FAISS) | list_of_all_scores = {faiss_scores} | best_score = {best_faiss}")
+            log.info(
+                f"Doc-check (FAISS) | list_of_all_scores = {faiss_scores} | best_score = {best_faiss}"
+            )
             log.info(f"FAISS normalized similarity score | faiss_sim = {faiss_sim}")
 
             if self.reranker:
@@ -91,25 +93,29 @@ class RetrieverWrapper:
                 # getting the best reranked scored:
                 best_rerank = max(rerank_scores)
 
-                log.info(f"Doc-check (Reranker) | reranked_scores = {rerank_scores} | best_reranked_Score = {best_rerank}")
-    
+                log.info(
+                    f"Doc-check (Reranker) | reranked_scores = {rerank_scores} | best_reranked_Score = {best_rerank}"
+                )
+
                 # Convert reranker output to normalized similarity
                 rerank_sim = 1 / (1 + math.exp(-best_rerank))
-                log.info(f"Rerankers normalized similarity score | rerank_sim = {rerank_sim}")
+                log.info(
+                    f"Rerankers normalized similarity score | rerank_sim = {rerank_sim}"
+                )
 
             # Weighted combination of faiss and reranker scores
             alpha = self.reranker_config.get("faiss_weight", 0.6)
             beta = self.reranker_config.get("rerank_weight", 0.4)
 
             final_score = alpha * faiss_sim + beta * rerank_sim
-            log.info(f"Final score after combining normaloized faiss and rerank score | final_score = {final_score}")
+            log.info(
+                f"Final score after combining normaloized faiss and rerank score | final_score = {final_score}"
+            )
 
             # Save for router
             self.last_best_distance = final_score
 
-            is_relevant = final_score >= 0.56
-
-            return is_relevant, final_score
+            return final_score >= 0.56, final_score
 
         except Exception as e:
             log.error("Quick relevance check failed | error=%s", str(e))
@@ -130,18 +136,22 @@ class RetrieverWrapper:
             final_k = self.reranker_config.get("final_k")  # 6
 
             fetch_k_mmr = self.retriever_config.get("fetch_k", 35)  # 35
-            top_k_for_mmr = self.retriever_config.get("top_k", 10)  # 8
+            top_k_for_mmr = self.retriever_config.get("top_k", 10)  # 10
 
             # MMR (Maximal Marginal Relevance) for diversity
             if self.retriever_config.get("search_type") == "mmr":
                 lambda_mult = self.retriever_config.get("lambda_mult", 0.5)
 
-                log.info(f"using MMR Search for retrieval with config parameters | final_k_sent_to_RAG_LLM = {top_k_for_mmr} | fetch_k = {fetch_k_mmr} | lambda_mult = {lambda_mult}")
+                log.info(
+                    f"using MMR Search for retrieval with config parameters | final_k_sent_to_RAG_LLM = {top_k_for_mmr} | fetch_k = {fetch_k_mmr} | lambda_mult = {lambda_mult}"
+                )
 
                 docs = self.vectorestore.max_marginal_relevance_search(
                     query, k=top_k_for_mmr, fetch_k=fetch_k_mmr, lambda_mult=lambda_mult
                 )
-                log.info(f"Length of documents retrieved for mmr search | num_docs = {len(docs)}")
+                log.info(
+                    f"Length of documents retrieved for mmr search | num_docs = {len(docs)}"
+                )
             else:
                 # if search type is not set to mmr then retrieve using basic similarity search
                 docs = self.vectorestore.similarity_search(query, k=fetch_k)
@@ -205,4 +215,3 @@ class RetrieverWrapper:
             raise ValueError("Vectorstore has no embedding_function")
         # return the embedded query:
         return embd_func.embed_query(query)
-        

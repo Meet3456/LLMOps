@@ -3,7 +3,7 @@ embedding_model:
   model_name: "models/text-embedding-004"
 
 retriever:
-  top_k: 8
+  top_k: 10
   search_type: "mmr"
   fetch_k: 35
   lambda_mult: 0.5 
@@ -17,8 +17,8 @@ groq:
 
 reranker:
   enabled: true
-  model_name: "BAAI/bge-reranker-v2-m3"
-  top_k_routing: 10      # number of docs used in routing quick check
+  model_name: "cross-encoder/ms-marco-MiniLM-L6-v2"
+  top_k_routing: 8      # number of docs used in routing quick check
   top_k_retrieval: 25    # number of docs fetched from FAISS before reranking
   final_k: 6            # final docs sent to RAG LLM 
   torch_dtype: "float32"

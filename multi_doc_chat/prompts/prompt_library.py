@@ -23,8 +23,8 @@ router_prompt = ChatPromptTemplate.from_messages(
                 "  * approx_tokens (int)\n\n"
                 "STRICT RULES (do NOT violate):\n"
                 "1. If signals.query_related_to_fetched_documents is true = Then route to 'rag'.\n"
-                "2. If signals.query_related_to_fetched_documents is false = Then you MUST NOT choose 'rag'.\n"
-                "3. If signals.contains_url is true OR signals.asks_for_latest is true = Then route to 'tools'.\n"
+                "2. If signals.query_related_to_fetched_documents is false = Then you must analyze the query and also other signals like best_Distance and then other parameters and decide accordingly.\n"
+                "3. Choose 'tools' ONLY if latest/live/external info is required . If signals.contains_url is true OR signals.asks_for_latest is true = Then route to 'tools'.\n"
                 "4. Otherwise, route to 'reasoning'.\n\n"
                 "Respond ONLY with valid JSON:\n"
                 '{{ "source": "rag" | "tools" | "reasoning" }}\n'

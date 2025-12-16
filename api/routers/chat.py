@@ -87,15 +87,17 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
     # 4. Embed query once (used for semantic cache + retrieval)
     query_embedding = await run_sync(retriever.embed_query, norm_query)
 
-    # 5. Lookup retrieval cache for a query using: semantic or exact norm query match in the redis database
+    # 5. Lookup retrieval cache for a query using: semantic or exact normalized query match in the redis database
     cache_entry = lookup_retrieval_entry(session_id, norm_query, query_embedding)
 
     docs = None
+    skip_retrieval = False
 
     # if cache entry is found then fetch the doc ids from the cache and from ids respective document
     if cache_entry:
         doc_ids = cache_entry["doc_ids"]
         docs = retriever.return_docs_from_ids(ids=doc_ids)
+        skip_retrieval = True
         log.info(
             f"Reused cached retrieval docs | session_id={session_id} | List_doc_ids={doc_ids} | count_of_docs_retrieved={len(docs)}"
         )
@@ -146,11 +148,12 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
 
     # Graph Execution:
     state = {
-        "input":input_query,
-        "chat_history":chat_history,
-        "orchestrator":orchestrator,
-        "docs":docs,
-        "steps":[]
+        "input": input_query,
+        "chat_history": chat_history,
+        "orchestrator": orchestrator,
+        "docs": docs,
+        "skip_retrieval": skip_retrieval,
+        "steps": [],
     } 
 
     try:

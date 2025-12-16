@@ -39,14 +39,16 @@ def rag_node(state):
     # will get the last 5 messages as we limited to 5
     chat_history = state.get("chat_history", [])
     docs = state.get("docs")
+    skip_retrieval = state.get("skip_retrieval", False)
 
     log.info(
-        "RAG node invoked | cached_docs=%s",
-        state.get("docs") is not None,
+        "RAG node invoked | cached_docs=%s | skip_retrieval=%s",
+        docs is not None,
+        skip_retrieval,
     )
 
     # Calls {run_rag} function in orchestrator which runs the RAG Pipeline:
-    response = orchestrator.run_rag(user_query, chat_history, docs)
+    response = orchestrator.run_rag(user_query, chat_history, docs, skip_retrieval)
 
     return {
         "output": response,
