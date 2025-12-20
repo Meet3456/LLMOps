@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from db.chat_repository import ChatRepository
 from db.database import get_db
@@ -25,7 +25,10 @@ class FastAPIFileAdapter:
 
 
 @router.post("/upload")
-async def uploadFiles(files: list[UploadFile] = File(...), db=Depends(get_db)):
+async def uploadFiles(
+    files: list[UploadFile] = File(...),
+    session_id: str | None = Form(None), 
+    db=Depends(get_db)):
     """
     Upload endpoint:
       - Creates a new DB session row
@@ -50,8 +53,8 @@ async def uploadFiles(files: list[UploadFile] = File(...), db=Depends(get_db)):
     # Run ingestion in threadpool (blocking work off main event loop)
     await ingestor.built_retriever(
         wrapped,
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=2000,
+        chunk_overlap=400,
         k=5,
         search_type="mmr",
         fetch_k=35,

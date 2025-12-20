@@ -74,7 +74,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
 
     norm_query = _normalize_query(input_query)
 
-    # 2. Get the answer from the redis cache(if present = fastest)
+    # 2. If same query is asked again(exactly similar) - Then : Get the answer from the redis cache(if present = fastest)
     cached_ans = get_cached_answer(session_id, norm_query=norm_query)
     if cached_ans:
         log.info("Answer cache HIT | session_id=%s", session_id)
@@ -87,7 +87,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
     # 4. Embed query once (used for semantic cache + retrieval)
     query_embedding = await run_sync(retriever.embed_query, norm_query)
 
-    # 5. Lookup retrieval cache for a query using: semantic or exact normalized query match in the redis database
+    # 5. Lookup the retrieval cache for a query using: semantic or exact normalized query match in the redis database
     cache_entry = lookup_retrieval_entry(session_id, norm_query, query_embedding)
 
     docs = None
@@ -140,24 +140,25 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
         db=db, session_id=session_id, limit=5
     )
 
-    # Build the langchain compatible chat History
+    # Build the langchain compatible chat History of 4-5 messages
     chat_history = [
         HumanMessage(m.content) if m.role == "user" else AIMessage(m.content)
         for m in messages
     ]
 
-    # Graph Execution:
+    # Build the state for Graph Execution:
     state = {
         "input": input_query,
         "chat_history": chat_history,
         "orchestrator": orchestrator,
         "docs": docs,
+        # if docs are cached from redis then we do not need to explictly retrieve documents
         "skip_retrieval": skip_retrieval,
         "steps": [],
     } 
 
     try:
-        # Invoke the graph   
+        # Invoke the graph with the respective state
         result = await run_sync(orchestrator.graph.invoke, state)
         answer = result["output"]
 

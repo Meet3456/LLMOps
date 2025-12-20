@@ -13,6 +13,7 @@ from multi_doc_chat.graph.state import GraphState
 
 
 def build_graph():
+    # this gets the current state for the running graph and then state is passed to the respective nodes
     graph = StateGraph(GraphState)
 
     graph.add_node("router", router_node)

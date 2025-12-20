@@ -1,6 +1,6 @@
 from typing import List
 
-from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func
+from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func, Column
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from multi_doc_chat.src.document_ingestion.data_ingestion import generate_session_id
@@ -53,6 +53,12 @@ class Message(Base):
 
     # Every Message gets a .session property pointing back to its owning session.
     session: Mapped[Session] = relationship("Session",back_populates="messages")
+
+
+class UploadFile(Base):
+    __tablename__ = "uploaded_files"
+
+    id = Column(String, primary_key=True)
 
 """
 session = await db.get(Session, session_id)

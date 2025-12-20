@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select,delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
@@ -18,13 +18,19 @@ class ChatRepository:
         await db.refresh(s)
         log.info("New session created | session_id=%s", s.id)
         return s.id
+    
+    async def delete_session(self, db:AsyncSession,session_id:str):
+        await db.execute(delete(Message).where(Message.session_id == session_id))
+        await db.execute(delete(Session).where(Session.id == session_id))
+        await db.commit()
+        log.info("Session deleted | session_id=%s", session_id)
 
     async def if_session_exists(self, db: AsyncSession, session_id: str) -> bool:
         out = await db.execute(select(Session).where(Session.id == session_id))
         exists = out.scalar() is not None
 
         log.info(
-            "Session existence check | session_id=%s | exists=%s",
+            "Session existence check for id: | session_id=%s | exists=%s",
             session_id,
             exists,
         )
@@ -45,6 +51,7 @@ class ChatRepository:
             session_id,
             len(objs),
         )
+
     async def get_history(self, db: AsyncSession, session_id: str, limit: int):
         """
         Get all messages of a session ordered by creation time.
