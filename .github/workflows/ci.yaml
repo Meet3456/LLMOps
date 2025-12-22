@@ -26,8 +26,7 @@ jobs:
 
       - name: Sync dependencies with uv (locked)
         run: |
-          uv sync
-          uv add pytest
+          uv sync --frozen
         
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

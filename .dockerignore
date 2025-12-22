@@ -1,0 +1,11 @@
+.venv
+__pycache__
+.git
+.gitignore
+logs
+notebooks
+faiss_index
+artifacts
+*.log
+.coverage
+coverage.xml
