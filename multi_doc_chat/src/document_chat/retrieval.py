@@ -133,10 +133,10 @@ class RetrieverWrapper:
         """
         try:
             fetch_k = self.reranker_config.get("top_k_retrieval")  # 25
-            final_k = self.reranker_config.get("final_k")  # 6
+            final_k = self.reranker_config.get("final_k")  # 8
 
             fetch_k_mmr = self.retriever_config.get("fetch_k", 35)  # 35
-            top_k_for_mmr = self.retriever_config.get("top_k", 10)  # 10
+            top_k_for_mmr = self.retriever_config.get("top_k", 12)  # 12
 
             # MMR (Maximal Marginal Relevance) for diversity
             if self.retriever_config.get("search_type") == "mmr":

@@ -188,27 +188,27 @@ class Orchestrator:
             llm = self.rag_llm
 
             # Rewrite the user query wrt to chat_history(if present)
-            if chat_history:
-                rewrite_query_chain = (
-                    self.contextualize_prompt | llm | StrOutputParser()
-                )
+            # if chat_history:
+            #     rewrite_query_chain = (
+            #         self.contextualize_prompt | llm | StrOutputParser()
+            #     )
 
-                rewritten_query = rewrite_query_chain.invoke(
-                    {"input": query, "chat_history": chat_history}
-                )
-                log.info(
-                    f"users input query successfully rewritten based on prev chat history | rewritten_query={rewritten_query}")
-            else:
-                log.info("no chat_history passing default user input query")
-                rewritten_query = query
+            #     rewritten_query = rewrite_query_chain.invoke(
+            #         {"input": query, "chat_history": chat_history}
+            #     )
+            #     log.info(
+            #         f"users input query successfully rewritten based on prev chat history | rewritten_query={rewritten_query}")
+            # else:
+            #     log.info("no chat_history passing default user input query")
+            #     rewritten_query = query
 
             if skip_retrieval:
-                log.info("run_rag | retrieval skipped (cache hit)")
+                log.info("run_rag | retrieval skipped (cache hit) Docs already fetched from Cache")
             else:
                 # If docs are not supplied → do normal retrieval
                 if docs is None:
                     # Retrieve relevant docs with mmr search from the faiss index
-                    docs = self.retriever.retrieve(rewritten_query)
+                    docs = self.retriever.retrieve(query)
 
             if not docs or len(docs) == 0:
                 log.info("RAG: no documents retrieved")
@@ -225,7 +225,7 @@ class Orchestrator:
             qa_chain = self.qa_prompt | llm | StrOutputParser()
 
             answer = qa_chain.invoke(
-                {"context": context, "input": rewritten_query, "chat_history": chat_history}
+                {"context": context, "input": query, "chat_history": chat_history}
             )
             return answer
 

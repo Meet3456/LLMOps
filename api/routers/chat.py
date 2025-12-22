@@ -29,6 +29,7 @@ class ChatResponse(BaseModel):
 class SessionInfo(BaseModel):
     id: str
     created_at: str
+    ingestion_status: str
 
 
 def _normalize_query(q: str) -> str:
@@ -55,14 +56,15 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
       8. Persist messages
       9. Cache answer
     """
-    session_id = req.session_id.strip()
-    input_query = req.message.strip()
+    session_id = req.session_id
+    input_query = req.message
 
     if not session_id:
         raise HTTPException(400, "session_id required")
     if not input_query:
         raise HTTPException(400, "message required")
 
+    log.info("-------------------------------------------------------------------------------------------------------------")
     log.info("Chat request received | session_id=%s", session_id)
 
     # Chat repository which contains helper functions related to database:
@@ -75,7 +77,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
     norm_query = _normalize_query(input_query)
 
     # 2. If same query is asked again(exactly similar) - Then : Get the answer from the redis cache(if present = fastest)
-    cached_ans = get_cached_answer(session_id, norm_query=norm_query)
+    cached_ans = await run_sync(get_cached_answer, session_id, norm_query)
     if cached_ans:
         log.info("Answer cache HIT | session_id=%s", session_id)
         return ChatResponse(answer=cached_ans)
@@ -88,7 +90,9 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
     query_embedding = await run_sync(retriever.embed_query, norm_query)
 
     # 5. Lookup the retrieval cache for a query using: semantic or exact normalized query match in the redis database
-    cache_entry = lookup_retrieval_entry(session_id, norm_query, query_embedding)
+    cache_entry = await run_sync(
+        lookup_retrieval_entry, session_id, norm_query, query_embedding
+    )
 
     docs = None
     skip_retrieval = False
@@ -119,11 +123,12 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
         )
 
         if doc_ids:
-            store_retrieved_result_entry(
-                session_id=session_id,
-                norm_query=norm_query,
-                embedding=query_embedding,
-                doc_ids=doc_ids,
+            await run_sync(
+                store_retrieved_result_entry,
+                session_id,
+                norm_query,
+                query_embedding,
+                doc_ids,
             )
 
             log.info(
@@ -136,9 +141,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
             log.info("No docs to cache for retrieval", session_id=req.session_id)
 
     # 6. Load chat history from DB and limit it to 4-5 messages
-    messages = await repo.get_history(
-        db=db, session_id=session_id, limit=5
-    )
+    messages = await repo.get_history(db=db, session_id=session_id, limit=5)
 
     # Build the langchain compatible chat History of 4-5 messages
     chat_history = [
@@ -155,7 +158,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
         # if docs are cached from redis then we do not need to explictly retrieve documents
         "skip_retrieval": skip_retrieval,
         "steps": [],
-    } 
+    }
 
     try:
         # Invoke the graph with the respective state
@@ -164,7 +167,8 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
 
     except Exception as e:
         log.error(
-            "Chat execution failed | error=%s",str(e),
+            "Chat execution failed | error=%s",
+            str(e),
         )
         raise HTTPException(500, "internal_error")
 
@@ -178,20 +182,7 @@ async def chat(req: ChatRequest, db=Depends(get_db)):
         ],
     )
     # Cache the Final answer along with the normalized user input query to the cache
-    cache_answer(session_id, norm_query, answer)
+    await run_sync(cache_answer, session_id, norm_query, answer)
 
     log.info("Chat completed | session_id=%s", session_id)
     return ChatResponse(answer=answer)
-
-@router.get("/sessions", response_model=list[SessionInfo])
-async def list_sessions(db=Depends(get_db)):
-    """
-    List all sessions to power the "previous chats" list in the frontend.
-    """
-    repo = ChatRepository()
-    sessions = await repo.list_sessions(db)
-
-    out: list[SessionInfo] = []
-    for s in sessions:
-        out.append(SessionInfo(id=s.id, created_at=str(s.created_at)))
-    return out

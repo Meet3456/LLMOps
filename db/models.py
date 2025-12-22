@@ -1,10 +1,9 @@
+from datetime import datetime
 from typing import List
 
-from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func, Column
+from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from multi_doc_chat.src.document_ingestion.data_ingestion import generate_session_id
-from datetime import datetime
 
 class Base(DeclarativeBase):
     pass
@@ -22,19 +21,25 @@ class Session(Base):
     """
 
     __tablename__ = "sessions"
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: generate_session_id()
-    )
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, server_default=func.now(), nullable=False
     )
     messages: Mapped[List["Message"]] = relationship(
-        "Message",
         # Back_populates makes it a two-way connection. Between session and messages
         back_populates="session",
         # If a Session is deleted → all Messages linked to it are automatically deleted.
         # No orphan messages exist with no session_id.
         cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    ingestion_status: Mapped[str] = mapped_column(
+        String, default="idle", nullable=False
+    )
+    files: Mapped[List["UploadedFile"]] = relationship(
+        back_populates="session",
+        cascade="all , delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -52,13 +57,24 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
     # Every Message gets a .session property pointing back to its owning session.
-    session: Mapped[Session] = relationship("Session",back_populates="messages")
+    session: Mapped[Session] = relationship(back_populates="messages")
 
 
-class UploadFile(Base):
+class UploadedFile(Base):
     __tablename__ = "uploaded_files"
 
-    id = Column(String, primary_key=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    filename: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
+
+    session: Mapped[Session] = relationship(back_populates="files")
+
 
 """
 session = await db.get(Session, session_id)

@@ -1,34 +1,63 @@
 [project]
 name = "llmops"
 version = "0.1.0"
-description = "Add your description here"
+description = "LLMOps Multi-Document RAG"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
+
 dependencies = [
-    "beautifulsoup4>=4.14.2",
-    "camelot-py[cv]>=1.0.9",
-    "docx2txt==0.9",
-    "faiss-cpu>=1.12.0",
+    # --- Web ---
     "fastapi==0.115.6",
-    "ipykernel==6.30.0",
+    "uvicorn==0.32.1",
     "jinja2==3.1.4",
+    "python-multipart==0.0.20",
+
+    # --- LangChain / LLM ---
     "langchain==0.3.27",
     "langchain-community==0.3.27",
     "langchain-core==0.3.72",
-    "langchain-google-genai==2.1.8",
     "langchain-groq==0.3.6",
+    "langchain-google-genai==2.1.8",
     "langchain-openai==0.2.10",
     "langgraph>=1.0.1",
     "langsmith>=0.4.32",
     "openai>=1.109.1",
+
+    # --- Data / Parsing ---
     "pandas>=2.3.3",
-    "pydantic-settings>=2.11.0",
+    "docx2txt==0.9",
+    "camelot-py>=1.0.9",
     "pymupdf>=1.26.6",
-    "python-dotenv==1.1.1",
-    "python-multipart==0.0.20",
-    "redis[async]>=7.1.0",
-    "rich>=14.2.0",
-    "structlog>=25.4.0",
+    "beautifulsoup4>=4.14.2",
     "tabulate>=0.9.0",
-    "uvicorn==0.32.1",
+
+    # --- Vector ---
+    "faiss-cpu>=1.12.0",
+
+    # --- Infra ---
+    "redis>=7.1.0",
+    "python-dotenv==1.1.1",
+    "pydantic-settings>=2.11.0",
+
+    # --- Logging ---
+    "structlog>=25.4.0",
+    "rich>=14.2.0",
+]
+
+[project.optional-dependencies]
+
+ml = [
+    "torch==2.3.1",
+    "sentence-transformers",
+    "torchvision==0.18.1+cpu",
+    "torchaudio==2.3.1+cpu",
+]
+
+dev = [
+    "ipykernel==6.30.0",
+    "streamlit",
+    "snakeviz",
+    "sqlalchemy",
+    "asyncpg",
+    "pytest",
 ]
