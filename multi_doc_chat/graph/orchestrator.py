@@ -122,7 +122,17 @@ class Orchestrator:
             )
             asks_for_latest = any(
                 kw in q_lower
-                for kw in ["latest", "today", "current", "recent", "recently", "who won", "scoreline", "news", "update"]
+                for kw in [
+                    "latest",
+                    "today",
+                    "current",
+                    "recent",
+                    "recently",
+                    "who won",
+                    "scoreline",
+                    "news",
+                    "update",
+                ]
             )
 
             token_approx = len(q_lower.split())
@@ -156,11 +166,11 @@ class Orchestrator:
 
             if signals["query_related_to_fetched_documents"]:
                 return "rag"
-            
+
             if signals["asks_for_latest"] or signals["contains_url"]:
                 return "tools"
-            
-            # pass to llm if not clear 
+
+            # pass to llm if not clear
             chain = self.router_prompt | self.router_llm
 
             # Invoke the chain with necessary inputs
@@ -188,27 +198,30 @@ class Orchestrator:
             llm = self.rag_llm
 
             # Rewrite the user query wrt to chat_history(if present)
-            # if chat_history:
-            #     rewrite_query_chain = (
-            #         self.contextualize_prompt | llm | StrOutputParser()
-            #     )
+            if chat_history:
+                rewrite_query_chain = (
+                    self.contextualize_prompt | llm | StrOutputParser()
+                )
 
-            #     rewritten_query = rewrite_query_chain.invoke(
-            #         {"input": query, "chat_history": chat_history}
-            #     )
-            #     log.info(
-            #         f"users input query successfully rewritten based on prev chat history | rewritten_query={rewritten_query}")
-            # else:
-            #     log.info("no chat_history passing default user input query")
-            #     rewritten_query = query
+                rewritten_query = rewrite_query_chain.invoke(
+                    {"input": query, "chat_history": chat_history}
+                )
+                log.info(
+                    f"users input query successfully rewritten based on prev chat history | rewritten_query={rewritten_query}"
+                )
+            else:
+                log.info("no chat_history passing default user input query")
+                rewritten_query = query
 
             if skip_retrieval:
-                log.info("run_rag | retrieval skipped (cache hit) Docs already fetched from Cache")
+                log.info(
+                    "run_rag | retrieval skipped (cache hit) Docs already fetched from Cache"
+                )
             else:
                 # If docs are not supplied → do normal retrieval
                 if docs is None:
                     # Retrieve relevant docs with mmr search from the faiss index
-                    docs = self.retriever.retrieve(query)
+                    docs = self.retriever.retrieve(rewritten_query)
 
             if not docs or len(docs) == 0:
                 log.info("RAG: no documents retrieved")
@@ -217,7 +230,7 @@ class Orchestrator:
                     "I could not find any relevant content in the knowledge base."
                 )
             log.info("Length of retrieved docs for RAG | docs=%d", len(docs))
-            
+
             # Fetch the content from docs and builf the context:
             context = "\n\n".join(getattr(d, "page_content", str(d)) for d in docs)
 
@@ -225,7 +238,11 @@ class Orchestrator:
             qa_chain = self.qa_prompt | llm | StrOutputParser()
 
             answer = qa_chain.invoke(
-                {"context": context, "input": query, "chat_history": chat_history}
+                {
+                    "context": context,
+                    "input": rewritten_query,
+                    "chat_history": chat_history,
+                }
             )
             return answer
 
