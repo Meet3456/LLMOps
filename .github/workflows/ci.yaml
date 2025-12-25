@@ -50,7 +50,7 @@ jobs:
 
       - name: build docker image
         run: |
-          docker build -t llmops-ci
+          docker build -t llmops-ci .
       
       - name: Run tests inside Docker
         run: |
