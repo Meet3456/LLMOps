@@ -1,0 +1,153 @@
+name: CI/CD to ECS Fargate via ECR
+on:
+  workflow_run:
+    # This waits for your "CI" workflow (testing) to turn Green.
+    workflows: ["CI"]
+    # Only triggers if the "CI" run happened on the 'main' branch.
+    branches:
+      - main
+    # Only triggers when "CI" is completely finished (success or failure)
+    types:
+      - completed
+  workflow_call:
+
+env:
+  # Maps to: The physical AWS data center (Stockholm) where your Cluster and ECR exist.
+  AWS_REGION: eu-north-1
+
+  # Maps to: The specific folder inside AWS ECR where Docker images are stored
+  ECR_REPOSITORY: llmops-backend
+
+  
+  # Maps to: The "manager" inside the cluster that ensures 1 copy of your app is always running.
+  # Interaction: The last step of this script tells THIS service to restart with the new code.
+  ECS_SERVICE: llmops-backend-service
+
+  # Maps to: The logic grouping of servers (Fargate) that run your app.
+  # AWS Link: ECS Console -> Clusters -> lmops-cluster.
+  ECS_CLUSTER: lmops-cluster
+
+  # Maps to: The Task JSON file that describes *how* to run the app.
+  ECS_TASK_DEFINITION: .github/workflows/task_definition.json
+  CONTAINER_NAME: llmops-backend-container
+
+permissions:
+  # Required for secure authentication with AWS (OIDC) if used
+  id-token: write
+  # Allows the script to read your code files.
+  contents: read
+
+jobs:
+  # JOB 1: CHECK STATUS
+
+  # Ensures we don't deploy if the CI tests actually failed.
+  check-status:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Acknowledge Success
+        run: echo "CI passed. Starting deployment."
+
+  # JOB 2: Build & Push Docker Image to amazon ECR
+
+  build-and-push:
+    name: Build & Push Docker Image
+    needs: [check-status]
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+
+    steps:
+      # step-1 - checkout the entire code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        # Action: Downloads your entire repository code onto the Runner.
+
+      # step-2 - configure the AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Security: Fetches the IAM keys you added to GitHub Secrets.
+          # AWS Link: IAM -> Users -> llmops-project.
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # step-3 - logging into amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        # Action: logs the Docker CLI into AWS so it can push images.
+        # Output: Provides the ECR Repo Url (that was created on AWS Console) (e.g., 974560757543.dkr.ecr...) in 'steps.login-ecr.outputs.registry'.
+
+      # step-4 - main - building,tagging and pushing docker image
+      - name: Build, tag, and push image to Amazon ECR
+        # aassigning a speciif if for the following step
+        id: build-image
+        env:
+          # get the speocofc ecr registry url
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # build a image tag for the docker
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          
+          docker build -t $IMAGE_URI .
+          
+          docker push $IMAGE_URI
+
+          docker tag $IMAGE_URI $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+  # JOB 3: DEPLOY to ECS
+
+  deploy:
+    name: Deploy to ECS Fargate
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      # Step-1 : Checkout the complete repo
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }} 
+
+      # Step-2 : Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Step-3 : This step Creates a temporary task definition in memory with the new Image ID.
+      - name: Render Amazon ECS task definition
+        id: render-Task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          # infut the task_definition file from teh disk
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          # get the docker container name:
+          container-name: ${{ env.CONTAINER_NAME }}
+          # Input: The Image URI from Job 2 (build-and-push)
+          image: ${{ needs.build-and-push.outputs.image }}
+      
+      # step-4 : Just debugging to print rendered task
+      - name: Print Rendered Task
+        run: cat ${{ steps.render-task.outputs.task-definition }}
+
+      # Step-5 :
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+        # Action: Tells AWS "Update service 'llmops-backend-service' to use this new Revision".
+        # Result: Fargate performs a rolling update (starts new container, health checks it, stops old one).
+
+      - name: Done!
+        run: echo "Deployed to ECS Fargate Successfully"

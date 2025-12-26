@@ -1,0 +1,81 @@
+{
+    "family": "llmops-backend-task",
+    "networkMode": "awsvpc",
+    "executionRoleArn": "arn:aws:iam::974560757543:role/ecsTaskExecutionRole",
+    "taskRoleArn": "arn:aws:iam::974560757543:role/ecsTaskExecutionRole",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "8192",
+    "containerDefinitions": [
+        {
+            "name": "llmops-backend-container",
+            "image": "974560757543.dkr.ecr.eu-north-1.amazonaws.com/llmops-backend:latest",
+            "cpu": 1024,
+            "memory": 3072,
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp",
+                    "name": "llmops-backend-8000-tcp",
+                    "appProtocol": "http"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "ENV",
+                    "value": "production"
+                },
+                {
+                    "name": "LANGCHAIN_TRACING_V2",
+                    "value": "true"
+                },
+                {
+                    "name": "LANGCHAIN_ENDPOINT",
+                    "value": "https://api.smith.langchain.com"
+                },
+                {
+                    "name": "LANGCHAIN_PROJECT",
+                    "value": "LLMOps"
+                },
+                {
+                    "name": "MAX_GROQ_CONCURRENCY",
+                    "value": "8"
+                }
+            ],
+            "secrets": [
+                {
+                    "name": "GROQ_API_KEY_DEFAULT",
+                    "valueFrom": "arn:aws:secretsmanager:eu-north-1:974560757543:secret:prod/llmops/apikeys-lQiqTK:GROQ_API_KEY_DEFAULT::"
+                },
+                {
+                    "name": "GROQ_API_KEY_COMPOUND",
+                    "valueFrom": "arn:aws:secretsmanager:eu-north-1:974560757543:secret:prod/llmops/apikeys-lQiqTK:GROQ_API_KEY_COMPOUND::"
+                },
+                {
+                    "name": "GOOGLE_API_KEY",
+                    "valueFrom": "arn:aws:secretsmanager:eu-north-1:974560757543:secret:prod/llmops/apikeys-lQiqTK:GOOGLE_API_KEY::"
+                },
+                {
+                    "name": "LANGCHAIN_API_KEY",
+                    "valueFrom": "arn:aws:secretsmanager:eu-north-1:974560757543:secret:prod/llmops/apikeys-lQiqTK:LANGCHAIN_API_KEY::"
+                },
+                {
+                    "name": "DATABASE_URL",
+                    "valueFrom": "arn:aws:secretsmanager:eu-north-1:974560757543:secret:prod/llmops/apikeys-lQiqTK:DATABASE_URL::"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/llmops-backend-logs",
+                    "awslogs-region": "eu-north-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ]
+}
