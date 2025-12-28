@@ -76,6 +76,56 @@
                     "awslogs-stream-prefix": "ecs"
                 }
             }
+        },
+        {
+            "name": "llmops-redis-container",
+            "image": "redis:alpine",
+            "cpu": 128,
+            "memory": 512,
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 6379,
+                    "hostPort": 6379,
+                    "protocol": "tcp"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/llmops-backend-logs",
+                    "awslogs-region": "eu-north-1",
+                    "awslogs-stream-prefix": "redis"
+                }
+            }
+        },
+        {
+            "name": "llmops-frontend-container",
+            "image": "974560757543.dkr.ecr.eu-north-1.amazonaws.com/llmops-backend:frontend-latest",
+            "cpu": 256,
+            "memory": 2048,
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 8501,
+                    "hostPort": 8501,
+                    "protocol": "tcp"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "API_URL",
+                    "value": "http://localhost:8000"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/llmops-backend-logs",
+                    "awslogs-region": "eu-north-1",
+                    "awslogs-stream-prefix": "frontend"
+                }
+            }
         }
     ]
 }

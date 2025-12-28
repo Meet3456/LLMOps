@@ -18,7 +18,6 @@ env:
   # Maps to: The specific folder inside AWS ECR where Docker images are stored
   ECR_REPOSITORY: llmops-backend
 
-  
   # Maps to: The "manager" inside the cluster that ensures 1 copy of your app is always running.
   # Interaction: The last step of this script tells THIS service to restart with the new code.
   ECS_SERVICE: llmops-backend-service
@@ -29,7 +28,8 @@ env:
 
   # Maps to: The Task JSON file that describes *how* to run the app.
   ECS_TASK_DEFINITION: .github/workflows/task_definition.json
-  CONTAINER_NAME: llmops-backend-container
+  CONTAINER_NAME_BACKEND: llmops-backend-container
+  CONTAINER_NAME_FRONTEND: llmops-frontend-container
 
 permissions:
   # Required for secure authentication with AWS (OIDC) if used
@@ -48,6 +48,7 @@ jobs:
       - name: Acknowledge Success
         run: echo "CI passed. Starting deployment."
 
+
   # JOB 2: Build & Push Docker Image to amazon ECR
 
   build-and-push:
@@ -55,7 +56,8 @@ jobs:
     needs: [check-status]
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.build-image.outputs.image }}
+      image_backend: ${{ steps.build-backend.outputs.image }}
+      image_frontend: ${{ steps.build-frontend.outputs.image }}
 
     steps:
       # step-1 - checkout the entire code
@@ -80,10 +82,10 @@ jobs:
         # Action: logs the Docker CLI into AWS so it can push images.
         # Output: Provides the ECR Repo Url (that was created on AWS Console) (e.g., 974560757543.dkr.ecr...) in 'steps.login-ecr.outputs.registry'.
 
-      # step-4 - main - building,tagging and pushing docker image
-      - name: Build, tag, and push image to Amazon ECR
-        # aassigning a speciif if for the following step
-        id: build-image
+      # step-4 - Build the backend image
+      - name: Build, tag, and push backend-image to Amazon ECR
+        # assigning a speciif if for the following step
+        id: build-backend
         env:
           # get the speocofc ecr registry url
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -92,14 +94,36 @@ jobs:
         run: |
           IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           
-          docker build -t $IMAGE_URI .
+          docker build -f Dockerfile -t $IMAGE_URI .
           
           docker push $IMAGE_URI
 
-          docker tag $IMAGE_URI $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker tag $IMAGE_URI $ECR_REGISTRY/$ECR_REPOSITORY:backend-latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:backend-latest
 
           echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+      # step-5 - Build the frontend image
+      - name: Build, tag, and push frontend-image to Amazon ECR
+        # assigning a speciif if for the following step
+        id: build-frontend
+        env:
+          # get the speocofc ecr registry url
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # build a image tag for the docker
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          
+          docker build -f Dockerfile.frontend -t $IMAGE_URI .
+          
+          docker push $IMAGE_URI
+
+          docker tag $IMAGE_URI $ECR_REGISTRY/$ECR_REPOSITORY:frontend-latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:frontend-latest
+
+          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+
 
   # JOB 3: DEPLOY to ECS
 
@@ -122,19 +146,32 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step-3 : This step Creates a temporary task definition in memory with the new Image ID.
+      # Step-3 : Update Backend Image in Task Def
       - name: Render Amazon ECS task definition
-        id: render-Task
+        id: render-backend
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           # infut the task_definition file from teh disk
           task-definition: ${{ env.ECS_TASK_DEFINITION }}
+
           # get the docker container name:
-          container-name: ${{ env.CONTAINER_NAME }}
+          container-name: ${{ env.CONTAINER_NAME_BACKEND }}
+
           # Input: The Image URI from Job 2 (build-and-push)
-          image: ${{ needs.build-and-push.outputs.image }}
+          image: ${{ needs.build-and-push.outputs.image_backend }}
       
-      # step-4 : Just debugging to print rendered task
+
+      # Step-4 : Update Frontend Image in Task Def (Using output from previous step)
+      - name: Update Frontend Image
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-backend.outputs.task-definition }}
+          container-name: ${{ env.CONTAINER_NAME_FRONTEND }}
+          image: ${{ needs.build-and-push.outputs.image_frontend }}
+
+
+      # step-5 : Just debugging to print rendered task
       - name: Print Rendered Task
         run: cat ${{ steps.render-task.outputs.task-definition }}
 
@@ -142,7 +179,7 @@ jobs:
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: ${{ steps.render-task.outputs.task-definition }}
+          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true

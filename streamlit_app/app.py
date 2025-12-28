@@ -1,20 +1,16 @@
-from datetime import datetime
+import os
+
 import requests
 import streamlit as st
 
-# =========================================================
-# CONFIG
-# =========================================================
-API_BASE = "http://localhost:8000"
-
+API_BASE = os.getenv("API_URL", "http://localhost:8000")
 st.set_page_config(
     page_title="Multi-Document Chat",
     layout="wide",
 )
 
-# =========================================================
 # STYLES
-# =========================================================
+
 st.markdown(
     """
     <style>
@@ -27,9 +23,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# =========================================================
+
 # API HELPERS
-# =========================================================
 def api(method: str, path: str, **kwargs):
     try:
         r = requests.request(method, f"{API_BASE}{path}", timeout=30, **kwargs)
@@ -42,9 +37,8 @@ def api(method: str, path: str, **kwargs):
         st.error(f"Backend connection error: {e}")
         return None
 
-# =========================================================
+
 # STATE MANAGEMENT
-# =========================================================
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
 if "messages" not in st.session_state:
@@ -52,20 +46,18 @@ if "messages" not in st.session_state:
 if "sessions" not in st.session_state:
     st.session_state.sessions = []
 
-# =========================================================
+
 # LOAD DATA
-# =========================================================
 def refresh_sessions():
     # Calling the endpoint moved to session.py
     data = api("GET", "/sessions")
     st.session_state.sessions = data if data else []
 
+
 # Initial Load
 refresh_sessions()
 
-# =========================================================
 # SIDEBAR
-# =========================================================
 st.sidebar.title("💬 Sessions")
 
 # Session List
@@ -110,7 +102,7 @@ if st.session_state.session_id:
         st.sidebar.caption("No files uploaded")
 
     uploads = st.sidebar.file_uploader("Upload documents", accept_multiple_files=True)
-    
+
     if uploads:
         if st.sidebar.button("Process Files"):
             with st.spinner("Indexing documents..."):
@@ -125,9 +117,7 @@ if st.session_state.session_id:
             st.rerun()
 
 
-# =========================================================
 # MAIN CHAT
-# =========================================================
 st.title("📄 Multi-Document Chat")
 
 if not st.session_state.session_id:
@@ -158,10 +148,12 @@ if query:
                     "message": query,
                 },
             )
-            
+
             if resp:
                 answer = resp["answer"]
                 st.markdown(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer}
+                )
             else:
                 st.error("Failed to get response")
