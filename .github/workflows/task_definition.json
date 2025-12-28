@@ -12,7 +12,7 @@
         {
             "name": "llmops-backend-container",
             "image": "974560757543.dkr.ecr.eu-north-1.amazonaws.com/llmops-backend:latest",
-            "cpu": 1024,
+            "cpu": 512,
             "memory": 3072,
             "essential": true,
             "portMappings": [
