@@ -10,24 +10,59 @@
     "memory": "8192",
     "containerDefinitions": [
         {
+            "name": "llmops-redis-container",
+            "image": "redis:7-alpine",
+            "cpu": 128,
+            "memory": 512,
+            "essential": true,
+            "command": [
+                "redis-server",
+                "--bind", "127.0.0.1",
+                "--port", "6379"
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/llmops-backend-logs",
+                    "awslogs-region": "eu-north-1",
+                    "awslogs-stream-prefix": "redis"
+                }
+            }
+        },
+        {
             "name": "llmops-backend-container",
             "image": "974560757543.dkr.ecr.eu-north-1.amazonaws.com/llmops-backend:latest",
             "cpu": 512,
             "memory": 3072,
             "essential": true,
-            "portMappings": [
+            "dependsOn": [
                 {
-                    "containerPort": 8000,
-                    "hostPort": 8000,
-                    "protocol": "tcp",
-                    "name": "llmops-backend-8000-tcp",
-                    "appProtocol": "http"
+                    "containerName": "llmops-redis-container",
+                    "condition": "START"
                 }
+            ],
+            "command": [
+                "uv",
+                "run",
+                "uvicorn",
+                "api.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000"
             ],
             "environment": [
                 {
                     "name": "ENV",
                     "value": "production"
+                },
+                {
+                    "name": "REDIS_HOST",
+                    "value": "127.0.0.1"
+                },
+                {
+                    "name": "REDIS_PORT",
+                    "value": "6379"
                 },
                 {
                     "name": "LANGCHAIN_TRACING_V2",
@@ -73,51 +108,56 @@
                 "options": {
                     "awslogs-group": "/ecs/llmops-backend-logs",
                     "awslogs-region": "eu-north-1",
-                    "awslogs-stream-prefix": "ecs"
-                }
-            }
-        },
-        {
-            "name": "llmops-redis-container",
-            "image": "redis:alpine",
-            "cpu": 128,
-            "memory": 512,
-            "essential": true,
-            "portMappings": [
-                {
-                    "containerPort": 6379,
-                    "hostPort": 6379,
-                    "protocol": "tcp"
-                }
-            ],
-            "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                    "awslogs-group": "/ecs/llmops-backend-logs",
-                    "awslogs-region": "eu-north-1",
-                    "awslogs-stream-prefix": "redis"
+                    "awslogs-stream-prefix": "backend"
                 }
             }
         },
         {
             "name": "llmops-frontend-container",
-            "image": "974560757543.dkr.ecr.eu-north-1.amazonaws.com/llmops-backend:frontend-latest",
+            "image": "974560757543.dkr.ecr.eu-north-1.amazonaws.com/llmops-backend:latest",
             "cpu": 256,
             "memory": 2048,
             "essential": true,
+            "dependsOn": [
+                {
+                    "containerName": "llmops-backend-container",
+                    "condition": "START"
+                }
+            ],
+            "command": [
+                "uv",
+                "run",
+                "streamlit",
+                "run",
+                "streamlit_app/app.py",
+                "--server.port=8501",
+                "--server.address=0.0.0.0",
+                "--server.headless=true",
+                "--server.runOnSave=false",
+                "--browser.gatherUsageStats=false"
+            ],
             "portMappings": [
                 {
                     "containerPort": 8501,
-                    "hostPort": 8501,
                     "protocol": "tcp"
                 }
             ],
             "environment": [
                 {
                     "name": "API_URL",
-                    "value": "http://localhost:8000"
+                    "value": "http://127.0.0.1:8000"
                 }
             ],
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:8501/_stcore/health || exit 1"
+                ],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 60
+            },
             "logConfiguration": {
                 "logDriver": "awslogs",
                 "options": {
