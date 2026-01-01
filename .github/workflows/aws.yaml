@@ -130,7 +130,7 @@ jobs:
         with:
           task-definition: ${{ env.ECS_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_BACKEND }}
-          image: ${{ needs.build-and-push.outputs.image }}
+          image: ${{ needs.build-and-push.outputs.image_backend }}
 
       # Update Frontend Container Definition (Using output from previous step)
       - name: Render Frontend Definition
@@ -139,7 +139,7 @@ jobs:
         with:
           task-definition: ${{ steps.render-backend.outputs.task-definition }}
           container-name: ${{ env.CONTAINER_FRONTEND }}
-          image: ${{ needs.build-and-push.outputs.image }}
+          image: ${{ needs.build-and-push.outputs.image_frontend }}
 
       # step-5 : Just debugging to print rendered task
       - name: Print Rendered Task
