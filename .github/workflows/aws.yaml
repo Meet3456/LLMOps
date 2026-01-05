@@ -20,7 +20,7 @@ env:
 
   # Maps to: The "manager" inside the cluster that ensures 1 copy of your app is always running.
   # Interaction: The last step of this script tells THIS service to restart with the new code.
-  ECS_SERVICE: llmops-backend-service
+  ECS_SERVICE: llmops-backend-service-v2
 
   # Maps to: The logic grouping of servers (Fargate) that run your app.
   # AWS Link: ECS Console -> Clusters -> lmops-cluster.
