@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir uv
 # Initialize the work directory
 WORKDIR /app
 
+ENV APP_ENV=production
+
 # Copy dependency files first for caching
 COPY pyproject.toml uv.lock* ./
 
