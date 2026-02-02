@@ -11,7 +11,6 @@ dependencies = [
     "uvicorn==0.32.1",
     "jinja2==3.1.4",
     "python-multipart==0.0.20",
-
     # --- LangChain / LLM ---
     "langchain==0.3.27",
     "langchain-community==0.3.27",
@@ -22,7 +21,6 @@ dependencies = [
     "langgraph>=1.0.1",
     "langsmith>=0.4.32",
     "openai>=1.109.1",
-
     # --- Data / Parsing ---
     "pandas>=2.3.3",
     "docx2txt==0.9",
@@ -30,30 +28,26 @@ dependencies = [
     "pymupdf>=1.26.6",
     "beautifulsoup4>=4.14.2",
     "tabulate>=0.9.0",
-
     # --- Vector ---
     "faiss-cpu>=1.12.0",
-
     # --- Infra ---
     "redis>=7.1.0",
     "python-dotenv==1.1.1",
     "pydantic-settings>=2.11.0",
-
     # --- Logging ---
     "structlog>=25.4.0",
     "rich>=14.2.0",
-
     "torch==2.3.1",
     "sentence-transformers",
     "torchvision==0.18.1+cpu",
     "torchaudio==2.3.1+cpu",
-
     "ipykernel==6.30.0",
     "streamlit",
     "snakeviz",
     "sqlalchemy",
     "asyncpg",
-    "pytest"
+    "pytest",
+    "boto3>=1.42.38",
 ]
 
 

@@ -32,6 +32,8 @@ async def _process_single_path(
     """
     docs: List[Document] = []
     extension = p.suffix.lower()
+
+    # get the current event Loop (asyncio)
     loop = asyncio.get_running_loop()
     
     try:
@@ -40,6 +42,8 @@ async def _process_single_path(
             # Basic Text Docs Processing for pdf:
 
             loader = PyPDFLoader(str(p))
+
+            # since Loading and Parsing of Documents is CPU Heavy - and if we directly run in the Event Loop(without THreadpool Executor) - The event Loop Freezes
             text_docs = await loop.run_in_executor(
                 executor, loader.load
             )
@@ -88,8 +92,11 @@ async def _process_single_path(
             # Image processing for pdf : extract images using pymupdf and caption them concurrently from bytes
 
             pdf = fitz.open(str(p))
+
+            # A list of Caption Task to parallely generate Image captioning Task
             caption_tasks = []
             image_meta = []
+            
             for i in range(len(pdf)):
                 # processing individual page   
                 page = pdf[i]
@@ -146,7 +153,7 @@ async def _process_single_path(
                             },
                         )
                     )
-            pdf.close()
+            pdf.close() 
 
         elif extension == ".docx":
             loader = Docx2txtLoader(str(p))

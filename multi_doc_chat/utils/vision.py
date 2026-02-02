@@ -11,7 +11,7 @@ from multi_doc_chat.logger import GLOBAL_LOGGER as log
 client = None
 
 
-def get_client(): 
+def get_client():
     global client
     if client is None:
         api_key = os.getenv("GROQ_API_KEY_COMPOUND")
@@ -19,6 +19,7 @@ def get_client():
             raise ValueError("GROQ_API_KEY environment variable not set.")
         client = AsyncGroq(api_key=api_key)
     return client
+
 
 # Global semaphore to limit concurrent Groq calls
 semaphore = asyncio.Semaphore(int(os.getenv("MAX_GROQ_CONCURRENCY", 8)))
@@ -85,11 +86,11 @@ async def _caption_request(
 
 async def caption_image_from_bytes(
     image_bytes: bytes,
-    prompt: str = "Describe the image in a concise caption. Include objects, scene, and any notable attributes.",
+    prompt: str = "Describe the image in a concise caption. Include objects, scene, and any notable attributes.If it has some financial details/table capture each and every value accordingly and generate perfect summary by considering and retaining all the values respectively. If it is related to some data analysis like a Bar chart , pie chart Retain all the numerical values as well as the categories and other RElated things if present with proper , accurate and robust matching and summary",
     retries: int = 2,
     timeout: int = 30,
     model: str = "meta-llama/llama-4-scout-17b-16e-instruct",
-    max_tokens: int = 512,
+    max_tokens: int = 768,
     top_p: float = 0.9,
     temperature: float = 0.3,
 ) -> Dict[str, Any]:
@@ -97,7 +98,9 @@ async def caption_image_from_bytes(
 
     for attempt in range(1, retries + 1):
         try:
-            log.debug(f"Captioning image from bytes | attempt={attempt} | retries={retries}")
+            log.debug(
+                f"Captioning image from bytes | attempt={attempt} | retries={retries}"
+            )
 
             captions = await _caption_request(
                 [base_64],
@@ -112,7 +115,7 @@ async def caption_image_from_bytes(
             log.debug(f"Captioning successful | caption = {caption_text}")
             return {"caption": caption_text or "[Image caption unavailable]"}
         except asyncio.TimeoutError:
-            log.warning("Groq caption timeout | attempt=%d",attempt)
+            log.warning("Groq caption timeout | attempt=%d", attempt)
         except Exception as e:
             log.warning(f"Groq caption error | attempt={attempt} | error={str(e)}")
 
@@ -121,7 +124,6 @@ async def caption_image_from_bytes(
 
 async def caption_image(
     image_path: str,
-    prompt: str = "Describe the image in a concise caption. Include objects, scene, and any notable attributes.",
     **kwargs,
 ) -> Dict[str, Any]:
     """
@@ -137,8 +139,8 @@ async def caption_image(
 
         image_bytes = await loop.run_in_executor(executor, _read_bytes)
 
-        return await caption_image_from_bytes(image_bytes, prompt=prompt, **kwargs)
+        return await caption_image_from_bytes(image_bytes, **kwargs)
 
     except Exception as e:
         log.error(f"Image captioning failed | error = {str(e)} | path={image_path}")
-        return {"caption": "", "error": str(e)} 
+        return {"caption": "", "error": str(e)}

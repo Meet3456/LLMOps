@@ -1,4 +1,156 @@
 """
+FastAPI runs on Asyncio - so the asyncio event Loop should never be blocked
+
+What is Event Loop?
+    - event loop is as: A single smart manager - {who coordinates many tasks, but does not do heavy labor}
+    - It switches between tasks extremely fast
+    - It waits for I/O
+    - Schedules Work
+
+Event Loop:
+    - User A: waiting for PDF parsing
+    - User B: waiting for image caption
+    - User C: waiting for DB write
+
+Note - Blocking operations should not be loaded into Event loop(as they are computation Heavy) - The event Loop Freezes
+| Operation        | Why blocking      |
+| ---------------- | ----------------- |
+| PDF parsing      | CPU heavy         |
+| FAISS indexing   | CPU heavy         |
+| Disk reads       | OS-level blocking |
+| Image processing | CPU + memory      |
+
+Non-Blocking Operations:
+| Operation             | Why safe       |
+| --------------------- | -------------- |
+| await network I/O     | OS handles     |
+| await asyncio.sleep   | yields control |
+| await DB async client | cooperative    |
+
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+THREADPOOL EXECUTOR (THE WORKERS)
+
+- What is ThreadPoolExecutor?
+    executor = ThreadPoolExecutor(max_workers=16)
+
+- Means:
+    “I have 16 background workers to do heavy jobs”
+
+- These workers:
+    - run blocking code
+    - do CPU & disk work (spread te work between 16 workers)
+    - do not block the event loop
+
+- Key idea
+    - Event loop delegates heavy work
+    - Threadpool executes heavy work
+
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+run_in_executor() (THE BRIDGE)
+
+- Syntax
+    await loop.run_in_executor(executor, func, arg1, arg2)
+
+- Meaning:
+
+    “Hey event loop,
+    please ask a worker thread to run `func(arg1, arg2)`
+    and notify me when it’s done.”
+
+- What happens internally?
+
+    - Event loop submits job to executor
+    - Executor assigns a free worker thread
+    - Worker thread - {runs blocking code}
+    - Event loop continues serving others {in background the task is assigned to a worker thread}
+    - Result comes back
+    - await resumes
+
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+- In document_ops.py :
+    Threadpool creation
+    executor = ThreadPoolExecutor(max_workers=16)
+    So -> we have 16 workers.
+
+- _process_single_path :
+    async def _process_single_path(p, images_dir, tables_dir):
+        loop = asyncio.get_running_loop()
+
+        text_docs = await loop.run_in_executor(
+            executor, loader.load
+        )
+
+- What is happening?
+    Step	    Description
+     1	    Event loop starts _process_single_path
+     2	    PDF parsing is detected
+     3	    Parsing is delegated(moved towards) to threadpool
+     4	    Event loop moves to next task (in background the threads spawned do the Parsing task)
+     5	    Worker parses PDF
+     6	    Result comes back
+     7	    Coroutine(await) resumes
+
+- asyncio.gather
+    tasks = [_process_single_path(p) for p in paths]
+    results = await asyncio.gather(*tasks)
+
+    Meaning:
+    - “Process all files concurrently”
+    - All the files (which are present in paths list are processed Together), parallely/concurrently
+
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+One user uploads MULTIPLE PDFs - Upload: [A.pdf, B.pdf, C.pdf]
+
+- STEP: 1
+    asyncio.gather(
+      _process_single_path(A),
+      _process_single_path(B),
+      _process_single_path(C)
+    )
+- Workers
+    Worker 1 → A.pdf
+    Worker 2 → B.pdf
+    Worker 3 → C.pdf
+
+- Result:
+    ✔ Parallel processing
+    ✔ Faster than sequential
+    ✔ Scales with CPU cores
+
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+FastAPI Event Loop (Brain)
+   |
+   |-- accepts requests
+   |-- schedules coroutines
+   |
+   v
+ThreadPoolExecutor (Workers)
+   |
+   |-- parse PDFs
+   |-- extract images
+   |-- run ML
+   |
+   v
+Results back to Event Loop
+
+"""
+
+"""
 Docstring for workflow:
 
 When new query is enetered by the user:

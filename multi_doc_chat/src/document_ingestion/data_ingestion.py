@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -13,6 +14,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
+from multi_doc_chat.utils.awsS3_client import S3Client
 from multi_doc_chat.utils.document_ops import load_documents_and_assets
 from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.model_loader import ModelLoader
@@ -49,44 +51,28 @@ class DataIngestor:
     # As soon as the object of class is created , this will initialize temp and faiss directories for storing input data and faiss index session wise (data and faiss_index folder)
     def __init__(
         self,
-        temp_base: str = "data",
-        faiss_base: str = "faiss_index",
-        use_session_dirs: bool = True,
-        session_id: Optional[str] = None,
+        session_id: str,
     ):
         try:
-            # Object to load the necessary models
-            self.model_loader = ModelLoader()
+            self.session_id = session_id
 
-            # Use seeion based directories:
-            self.use_session = use_session_dirs
-            self.session_id = session_id or generate_session_id()
-
-            # Initialize directories(temp,faiss and artifacts)
-            self.temp_base = Path(temp_base)
-            self.temp_base.mkdir(parents=True, exist_ok=True)
-            self.faiss_base = Path(faiss_base)
-            self.faiss_base.mkdir(parents=True, exist_ok=True)
-
-            # underscore _ at the beginning (_resolve_dir) is a strong Python convention meaning this is an "internal" or "private" helper method, not meant to be called from outside the class.
-            self.temp_dir = self._resolve_dir(self.temp_base)
-            self.faiss_dir = self._resolve_dir(self.faiss_base)
-
-            # New: artifact directory for saving extracted images/tables
-            self.artifacts_base = Path("artifacts")
-            # creates a session-wise artifacts folder based on session id(industry standard convention)
-            self.artifacts_dir = self._resolve_dir(self.artifacts_base)
-
-            # Subdirectories for images and tables
+            self.temp_dir = Path("data") / session_id
+            self.faiss_dir = Path("faiss_index") / session_id
+            self.artifacts_dir = Path("artifacts") / session_id
             self.images_dir = self.artifacts_dir / "images"
             self.tables_dir = self.artifacts_dir / "tables"
 
-            self.images_dir.mkdir(parents=True, exist_ok=True)
-            self.tables_dir.mkdir(parents=True, exist_ok=True)
+            for p in [
+                self.temp_dir,
+                self.faiss_dir,
+                self.images_dir,
+                self.tables_dir,
+            ]:
+                p.mkdir(parents=True, exist_ok=True)
 
-            log.info(
-                "ChatIngestor initialized",
-            )
+            self.model_loader = ModelLoader()
+            self.s3_client = S3Client()
+            log.info(f"DataIngestor Initialized | session={session_id}")
 
         except Exception as e:
             log.error(f"Failed to initialize ChatIngestor | error = {str(e)}")
@@ -94,25 +80,89 @@ class DataIngestor:
                 "Initialization error in ChatIngestor", e
             ) from e
 
-    def _resolve_dir(self, base_path: Path) -> Path:
-        """Resolve directory path, optionally adding session ID."""
-        # by default it is True , so it will create session specific directories
-        if self.use_session:
-            # e.g. set the dir_path to "faiss_index/abc123"
-            dir_path = base_path / self.session_id
-        else:
-            # else fallback to as use_session is False: "faiss_index/"
-            dir_path = base_path
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+    # Sync wrapper (called from threadpool)
+    def ingest_files_sync(
+        self,
+        uploaded_files,
+        chunk_size,
+        chunk_overlap,
+        chunk_size_table,
+        chunk_overlap_table,
+    ):
+        asyncio.run(
+            self._ingest_sync(
+                uploaded_files,
+                chunk_size,
+                chunk_overlap,
+                chunk_size_table,
+                chunk_overlap_table,
+            )
+        )
+
+    # Actual async ingestion:
+    async def _ingest_sync(
+        self,
+        uploaded_files,
+        chunk_size,
+        chunk_overlap,
+        chunk_size_table,
+        chunk_overlap_table,
+    ):
+        try:
+            # Save files
+            paths = save_uploaded_files(uploaded_files, self.temp_dir)
+            log.info(
+                "Files saved | count=%d | session_id=%s", len(paths), self.session_id
+            )
+
+            # Load documents concurrently
+            docs = await load_documents_and_assets(
+                paths,
+                images_dir=self.images_dir,
+                tables_dir=self.tables_dir,
+            )
+            log.info("Documents loaded | count=%d", len(docs))
+
+            if not docs:
+                raise ValueError("No valid documents loaded")
+
+            # Chunking
+            chunks = self._multimodal_split(
+                docs, chunk_size, chunk_overlap, chunk_size_table, chunk_overlap_table
+            )
+
+            for i, c in enumerate(chunks):
+                c.metadata.setdefault(
+                    "id", f"{self.session_id}_{i}_{uuid.uuid4().hex[:6]}"
+                )
+
+            # FAISS update
+            fm = FaissManager(
+                index_dir=self.faiss_dir,
+                session_id=self.session_id,
+                model_loader=self.model_loader,
+            )
+            fm.add_documents(chunks)
+            log.info("Added documnets to faiss")
+
+            # Upload artifacts
+            self.s3_client.upload_directory(
+                self.artifacts_dir, f"artifacts/{self.session_id}"
+            )
+
+            log.info("Ingestion completed | session=%s", self.session_id)
+
+        except Exception as e:
+            log.exception("Ingestion failed")
+            raise DocumentPortalException("Ingestion failed", e)
 
     def _multimodal_split(
         self,
         docs: List[Document],
-        chunk_size_text: int = 1000,
-        chunk_overlap_text: int = 200,
-        chunk_size_table: int = 600,
-        chunk_overlap_table: int = 50,
+        chunk_size_text,
+        chunk_overlap_text,
+        chunk_size_table,
+        chunk_overlap_table,
     ) -> List[Document]:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size_text,
@@ -155,87 +205,6 @@ class DataIngestor:
         log.info("Multimodal split complete")
         return out_chunks
 
-    async def built_retriever(
-        self,
-        paths: list[Path],
-        *,
-        chunk_size: int = 2000,
-        chunk_overlap: int = 400,
-        k: int = 5,
-        search_type: str = "mmr",
-        fetch_k: int = 35,
-        lambda_mult: float = 0.5,
-    ):
-        log.info(
-            f"Starting ingestion: saving uploaded files | count = {len(list(paths))}"
-        )
-
-        # Step 1: persist files to temp dir (save_uploaded_files returns Path list)
-        paths = save_uploaded_files(paths, self.temp_dir)
-        log.info("Files saved | count=%d | session_id=%s", len(paths), self.session_id)
-
-        # Step 2: async load docs & assets (text, tables, images/captions) from the list of paths
-        docs = await load_documents_and_assets(
-            paths, images_dir=self.images_dir, tables_dir=self.tables_dir
-        )
-        log.info("Documents loaded | count=%d", len(docs))
-
-        if not docs:
-            raise ValueError("No valid documents loaded")
-
-        # Step 3: chunking
-        chunks = self._multimodal_split(
-            docs,
-            chunk_size_text=chunk_size,
-            chunk_overlap_text=chunk_overlap,
-            chunk_size_table=600,
-            chunk_overlap_table=50,
-        )
-
-        # Step 3a: ensure each chunk has a stable unique ID in metadata
-        for idx, individual_c in enumerate(chunks):
-            md = dict(individual_c.metadata or {})
-            # Only assign if not already present
-            if "id" not in md:
-                md["id"] = f"{self.session_id}__{idx}_{uuid.uuid4().hex[:8]}"
-            individual_c.metadata = md
-
-        log.info("Chunk IDs assigned | total_chunks=%d", len(chunks))
-
-        # Step 4: create/load FAISS manager
-        fm = FaissManager(self.faiss_dir, self.model_loader)
-
-        # load or create faiss index
-        try:
-            vs = fm.load_or_create_index()
-            log.info(
-                f"FAISS loaded or created | index_dir = {str(self.faiss_dir)} | session_id = {self.session_id}"
-            )
-
-        except Exception as e:
-            log.warning(
-                f"First attempt to load/create FAISS failed, retrying | error={str(e)} | session_id = {self.session_id}"
-            )
-            vs = fm.load_or_create_index()
-
-        # Step 5: add documents idempotently
-        fm.add_documents(chunks)
-        log.info("Added documnets to faiss")
-
-        # Step 6: return retriever configured with search kwargs
-        search_kwargs = {"k": k}
-
-        if search_type == "mmr":
-            search_kwargs.update({"fetch_k": fetch_k, "lambda_mult": lambda_mult})
-
-        retriever = vs.as_retriever(
-            search_type=search_type, search_kwargs=search_kwargs
-        )
-        log.info(
-            f"Retriever ready | search_type = {search_type} | k = {k} | session_id = {self.session_id}"
-        )
-        return retriever
-
 
 class FaissManager:
     """
@@ -244,38 +213,56 @@ class FaissManager:
     - ingested_meta.json: keeps track of already-ingested fingerprints
     """
 
-    def __init__(self, index_dir: Path, model_loader: Optional[ModelLoader] = None):
-        self.index_dir = Path(index_dir)
+    def __init__(
+        self,
+        index_dir: Path,
+        session_id: str,
+        model_loader: Optional[ModelLoader] = None,
+    ):
+        self.index_dir = index_dir
         self.index_dir.mkdir(parents=True, exist_ok=True)
+        self.session_id = session_id
 
-        self.meta_path = self.index_dir / "ingested_meta.json"
+        # S3 Setup
+        self.s3_client = S3Client()
+        self.s3_prefix = f"faiss_index/{self.session_id}"
 
         # metadata of the docs
+        self.meta_path = self.index_dir / "ingested_meta.json"
         self._meta: Dict[str, Any] = {"rows": {}}
 
-        # if the metadta already exist s in the respective metadata_path then load it into {_meta} variable
+        self.model_loader = model_loader or ModelLoader()
+        self.emb = self.model_loader.load_embeddings()
+        self.vs: Optional[FAISS] = None
+
+        # Sync meta immediately on init to see what we have
+        self._sync_from_s3()
+        self._load_local_meta()
+
+    def _sync_from_s3(self):
+        """Download index files from S3 to Local if they don't exist."""
+        if not (self.index_dir / "index.faiss").exists():
+            log.info(
+                f"Local index missing for {self.session_id}. Attempting S3 download..."
+            )
+            self.s3_client.download_directory(self.s3_prefix, self.index_dir)
+
+    def _sync_to_s3(self):
+        """Upload local index files to S3."""
+        log.info(f"Syncing index to S3 | session_id={self.session_id}")
+        self.s3_client.upload_directory(self.index_dir, self.s3_prefix)
+
+    def _load_local_meta(self):
+        """Load metadata from disk."""
+        # if the metadta already exists in the respective metadata_path then load it into {_meta} variable
         if self.meta_path.exists():
             try:
                 self._meta = json.loads(self.meta_path.read_text(encoding="utf-8")) or {
                     "rows": {}
                 }
-                log.info(
-                    "Loaded existing FAISS metadata | entries=%d | index_dir=%s",
-                    len(self._meta.get("rows", {})),
-                    str(self.index_dir),
-                )
-            # If it does not exists then initialize it as a wmpty dictionary with key - "rows"
             except Exception as e:
+                log.error(f"Corrupt metadata, resetting. Error: {e}")
                 self._meta = {"rows": {}}
-                log.error(
-                    "Failed to load FAISS metadata | error=%s | index_dir=%s",
-                    str(e),
-                    str(self.index_dir),
-                )
-
-        self.model_loader = model_loader or ModelLoader()
-        self.emb = self.model_loader.load_embeddings()
-        self.vs: Optional[FAISS] = None
 
     def _exists(self) -> bool:
         """
@@ -305,9 +292,7 @@ class FaissManager:
         Duplicate detection is based on _fingerprint(text, metadata).
         """
         if self.vs is None:
-            raise ValueError(
-                "FAISS vectorstore not loaded. Call load_or_create_index() first."
-            )
+            self.load_or_create_index()
 
         new_docs: List[Document] = []
 
@@ -344,12 +329,17 @@ class FaissManager:
 
             # get the ids for all the new_docs that needs to be added in the Faiss vectore-store
             ids = [doc.metadata["id"] for doc in new_docs]
+
             # add the documents
             self.vs.add_documents(new_docs, ids=ids)
-            # save the updated Faiss index
+
             self.vs.save_local(str(self.index_dir))
+
             # save the updated meta-data
             self._save_meta()
+
+            # CRITICAL: Push to S3 immediately
+            self._sync_to_s3()
 
             log.info(
                 "Added new documents to FAISS index | new_count=%d | index_dir=%s",
@@ -374,12 +364,10 @@ class FaissManager:
             return self.vs
 
         # Create EMPTY FAISS index
-
         log.info(
             "Creating new FAISS index with dummy vector | index_dir=%s",
             str(self.index_dir),
         )
-
         # Createing a dummy document to initialize FAISS dimension
         dummy_doc = Document(
             page_content="__faiss_init__",
@@ -388,9 +376,9 @@ class FaissManager:
 
         # Create index with dummy doc
         self.vs = FAISS.from_documents([dummy_doc], embedding=self.emb)
-
-        # Save index and metadata
         self.vs.save_local(str(self.index_dir))
         self._save_meta()
 
+        # Save index and metadata
+        self._sync_to_s3()
         return self.vs
