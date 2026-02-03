@@ -42,8 +42,18 @@ async def uploadFiles(
         # Building the Faiss index:
         ingestor = DataIngestor(session_id=session_id)
 
-        # Run ingestion in threadpool so FastAPI event loop is NOT blocked
-        await run_in_threadpool(ingestor.ingest_files_sync, files, 2000, 400, 1000, 100)
+        # Run ingestion in threadpool so FastAPI event loop is NOT blocked (``run_in_threadpool`` : executes the function in a different OS thread)
+        """
+        Main Thread (FastAPI)
+        └── Event loop running
+            └── run_in_threadpool(...)
+                └── Worker Thread
+                    └── asyncio.run(...)  ✅ allowed
+
+        """
+        await run_in_threadpool(
+            ingestor.ingest_files_blocking, files, 2000, 400, 1000, 100
+        )
 
         await chat_repo.add_files(
             db,

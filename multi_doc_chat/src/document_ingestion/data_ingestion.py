@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -18,23 +17,6 @@ from multi_doc_chat.utils.awsS3_client import S3Client
 from multi_doc_chat.utils.document_ops import load_documents_and_assets
 from multi_doc_chat.utils.file_io import save_uploaded_files
 from multi_doc_chat.utils.model_loader import ModelLoader
-
-
-# Function to generate a unique session ID:
-def generate_session_id() -> str:
-    """Generate a unique session ID with timestamp."""
-    now = datetime.now()
-
-    day = now.strftime("%d")  # 18
-    month = now.strftime("%b").lower()  # nov
-    year = now.strftime("%Y")  # 2025
-    time_part = now.strftime("%I:%M_%p")  # 03:13_PM
-
-    # Clean time format (remove leading 0, lowercase am/pm)
-    time_part = time_part.lstrip("0").lower()
-
-    unique_id = uuid.uuid4().hex[:4]
-    return f"session_{day}_{month}_{year}_{time_part}_{unique_id}"
 
 
 class DataIngestor:
@@ -80,8 +62,8 @@ class DataIngestor:
                 "Initialization error in ChatIngestor", e
             ) from e
 
-    # Sync wrapper (called from threadpool)
-    def ingest_files_sync(
+    # Sync wrapper (called from threadpool - as threadpool excepts a sync function )
+    def ingest_files_blocking(
         self,
         uploaded_files,
         chunk_size,
@@ -89,18 +71,27 @@ class DataIngestor:
         chunk_size_table,
         chunk_overlap_table,
     ):
-        asyncio.run(
-            self._ingest_sync(
-                uploaded_files,
-                chunk_size,
-                chunk_overlap,
-                chunk_size_table,
-                chunk_overlap_table,
+        """
+        This runs in a worker thread.
+        It is blocking by design.
+        """
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(
+                self._ingest_async(
+                    uploaded_files,
+                    chunk_size,
+                    chunk_overlap,
+                    chunk_size_table,
+                    chunk_overlap_table,
+                )
             )
-        )
+        finally:
+            loop.close()
 
-    # Actual async ingestion:
-    async def _ingest_sync(
+    # Actual async ingestion which runs on another event loop:
+    async def _ingest_async(
         self,
         uploaded_files,
         chunk_size,

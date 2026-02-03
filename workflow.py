@@ -148,7 +148,65 @@ ThreadPoolExecutor (Workers)
    v
 Results back to Event Loop
 
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+- def ingest_files_sync(...):
+    asyncio.run(self._ingest_sync(...))
+
+- Why this exists
+    - run_in_threadpool() expects a sync function
+    - Your ingestion logic is async
+    - You need a bridge
+
+ThreadPool Worker
+   ↓
+Start new event loop
+   ↓
+Run async ingestion
+   ↓
+Close loop
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """
+
+
+
+
+
 
 """
 Docstring for workflow:
